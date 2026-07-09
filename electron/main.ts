@@ -221,6 +221,25 @@ ipcMain.handle('fs:delete', async (_e, targetPath: string) => {
   }
 })
 
+ipcMain.handle('fs:rename', async (_e, oldPath: string, newPath: string) => {
+  try {
+    await fs.mkdir(path.dirname(newPath), { recursive: true })
+    await fs.rename(oldPath, newPath)
+    return { success: true, path: newPath }
+  } catch (err) {
+    return { success: false, error: String(err) }
+  }
+})
+
+ipcMain.handle('fs:mkdir', async (_e, dirPath: string) => {
+  try {
+    await fs.mkdir(dirPath, { recursive: true })
+    return { success: true, path: dirPath }
+  } catch (err) {
+    return { success: false, error: String(err) }
+  }
+})
+
 ipcMain.handle('fs:refreshTree', async (_e, rootPath: string) => {
   const tree = await readDirRecursive(rootPath)
   return tree

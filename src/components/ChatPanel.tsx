@@ -5,16 +5,13 @@ import { streamChat } from '../services/aiService'
 import {
   buildAgentSystemPrompt,
   buildChatSystemPrompt,
-  parseAgentEdits,
   parseAgentCommands,
-  applyAgentEdits,
   applyAgentCommands,
-  openEditedFilesInEditor,
-  stripFileTags,
-  stripRunTags,
+  applyAgentFilesystem,
 } from '../services/agentService'
 import { PanelHeader, IconButton } from './PanelHeader'
 import { MarkdownMessage } from './MarkdownMessage'
+import { AgentMessageRenderer } from './AgentMessageRenderer'
 import { ChatModeSelector } from './ChatModeSelector'
 import { ChatContextBar, formatUserMessageWithContext } from './ChatContextBar'
 import { formatContextForPrompt, parsePastedCodeContext } from '../services/contextService'
@@ -119,39 +116,31 @@ export function ChatPanel() {
       }
 
       if (chatMode === 'agent' && rootPath) {
-        const edits = parseAgentEdits(fullContent)
-        const commands = parseAgentCommands(fullContent)
-        const summaryParts: string[] = []
+        const { summaryParts, errors, appliedFiles } = await applyAgentFilesystem(rootPath, fullContent)
 
-        if (edits.length > 0) {
-          const { applied, errors } = await applyAgentEdits(rootPath, edits)
-          if (applied.length > 0) {
-            openEditedFilesInEditor(rootPath, edits.filter((e) => applied.includes(e.path)))
-            const tree = await window.spiritus.refreshTree(rootPath)
-            setFileTree(tree)
-            setMessageAppliedFiles(assistantIdRef.current, applied)
-            summaryParts.push(
-              `✓ **Applied ${applied.length} file${applied.length > 1 ? 's' : ''}:** ${applied.map((f) => `\`${f}\``).join(', ')}`
-            )
-          }
-          if (errors.length) summaryParts.push(`⚠ ${errors.join('; ')}`)
+        if (appliedFiles.length > 0) {
+          setMessageAppliedFiles(assistantIdRef.current, appliedFiles)
         }
 
+        const commands = parseAgentCommands(fullContent)
         if (commands.length > 0) {
           useIDEStore.setState({ showTerminal: true })
           await new Promise((r) => setTimeout(r, 200))
-          const { results, errors } = await applyAgentCommands(rootPath, commands)
+          const { results, errors: cmdErrors } = await applyAgentCommands(rootPath, commands)
           const ok = results.filter((r) => r.success).map((r) => r.command)
           if (ok.length) {
             summaryParts.push(
               `✓ **Ran ${ok.length} command${ok.length > 1 ? 's' : ''}:** ${ok.map((c) => `\`${c}\``).join(', ')}`
             )
           }
-          if (errors.length) summaryParts.push(`⚠ ${errors.join('; ')}`)
+          errors.push(...cmdErrors)
         }
 
-        if (summaryParts.length > 0) {
-          updateLastAssistantMessage(fullContent + `\n\n---\n${summaryParts.join('\n')}`)
+        if (summaryParts.length > 0 || errors.length > 0) {
+          const tree = await window.spiritus.refreshTree(rootPath)
+          setFileTree(tree)
+          const errLine = errors.length ? `\n⚠ ${errors.join('; ')}` : ''
+          updateLastAssistantMessage(fullContent + `\n\n---\n${summaryParts.join('\n')}${errLine}`)
         }
       }
     } catch (err) {
@@ -186,7 +175,7 @@ export function ChatPanel() {
     }
   }
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       const pos = e.currentTarget.selectionStart ?? 0
       if (input.slice(0, pos).match(/@([\w./-]*)$/)) return
@@ -266,16 +255,20 @@ export function ChatPanel() {
               )}
             </div>
             {msg.content ? (
-              <MarkdownMessage
-                content={
-                  msg.role === 'assistant' && chatMode === 'agent'
-                    ? stripRunTags(stripFileTags(msg.content))
-                    : msg.content
-                }
-                isUser={msg.role === 'user'}
-                onApplyCode={handleApplyCode}
-                showApply={chatMode === 'chat'}
-              />
+              msg.role === 'assistant' && chatMode === 'agent' && !(isStreaming && msg.id === assistantIdRef.current) ? (
+                <AgentMessageRenderer
+                  content={msg.content}
+                  onApplyCode={handleApplyCode}
+                  showApply={false}
+                />
+              ) : (
+                <MarkdownMessage
+                  content={msg.content}
+                  isUser={msg.role === 'user'}
+                  onApplyCode={handleApplyCode}
+                  showApply={chatMode === 'chat'}
+                />
+              )
             ) : (
               isStreaming && msg.role === 'assistant' && <TypingIndicator />
             )}

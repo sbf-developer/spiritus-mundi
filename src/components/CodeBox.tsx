@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { Copy, Check, FileCode, ChevronRight } from 'lucide-react'
+import { Copy, Check, ChevronRight } from 'lucide-react'
+import { extBadge } from '../lib/agentMessageParser'
 
 export interface CodeBoxMeta {
   language: string
@@ -119,45 +120,61 @@ interface CodeBoxProps {
   onApply?: (code: string, language: string) => void
   showApply?: boolean
   defaultCollapsed?: boolean
+  variant?: 'default' | 'agent'
 }
 
-export function CodeBox({ meta, onApply, showApply, defaultCollapsed = false }: CodeBoxProps) {
-  const [copied, setCopied] = useState(false)
-  const [collapsed, setCollapsed] = useState(defaultCollapsed)
+export function CodeBox({
+  meta,
+  onApply,
+  showApply,
+  defaultCollapsed,
+  variant = 'default',
+}: CodeBoxProps) {
+  const lines = meta.code.split('\n')
+  const lineCount = lines.filter((l) => l.length > 0).length || lines.length
   const { added, removed } = diffStats(meta.code)
   const isDiff = added > 0 || removed > 0 || meta.language === 'diff'
-  const lines = meta.code.split('\n')
   const displayName = meta.filename?.split(/[/\\]/).pop() ?? meta.language
+  const badge = extBadge(displayName)
 
-  const handleCopy = () => {
+  const [copied, setCopied] = useState(false)
+  const [collapsed, setCollapsed] = useState(
+    defaultCollapsed ?? (variant === 'agent' ? lineCount > 6 : false)
+  )
+
+  const handleCopy = (e: React.MouseEvent) => {
+    e.stopPropagation()
     navigator.clipboard.writeText(meta.code)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
 
   return (
-    <div className="codebox my-2">
+    <div className={`codebox ${variant === 'agent' ? 'codebox-agent' : ''}`}>
       <button
         type="button"
         onClick={() => setCollapsed((c) => !c)}
         className="codebox-header w-full"
       >
-        <ChevronRight size={12} className={`codebox-chevron ${collapsed ? '' : 'codebox-chevron-open'}`} />
-        <FileCode size={12} className="codebox-file-icon" />
+        <ChevronRight size={11} className={`codebox-chevron ${collapsed ? '' : 'codebox-chevron-open'}`} />
+        <span className="codebox-ext">{badge}</span>
         <span className="codebox-filename">{displayName}</span>
-        {isDiff && (added > 0 || removed > 0) && (
-          <span className="codebox-stats">
-            {added > 0 && <span className="codebox-stat-add">+{added}</span>}
-            {removed > 0 && <span className="codebox-stat-del">-{removed}</span>}
-          </span>
-        )}
+        <span className="codebox-stats">
+          {isDiff ? (
+            <>
+              {added > 0 && <span className="codebox-stat-add">+{added}</span>}
+              {removed > 0 && <span className="codebox-stat-del">-{removed}</span>}
+            </>
+          ) : (
+            lineCount > 0 && <span className="codebox-stat-add">+{lineCount}</span>
+          )}
+        </span>
         <span className="codebox-actions" onClick={(e) => e.stopPropagation()}>
           {showApply && onApply && (
             <button
               type="button"
               onClick={() => onApply(meta.code, meta.language)}
               className="codebox-action-btn"
-              title="Apply to new file"
             >
               Apply
             </button>

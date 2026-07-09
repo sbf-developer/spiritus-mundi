@@ -1,0 +1,102 @@
+import { CodeBox } from './CodeBox'
+import { MarkdownMessage } from './MarkdownMessage'
+import { parseAgentMessageBlocks } from '../lib/agentMessageParser'
+import { detectLanguage } from '../store/ideStore'
+import { ActionCard } from './ActionCard'
+
+interface AgentMessageRendererProps {
+  content: string
+  onApplyCode?: (code: string, language: string) => void
+  showApply?: boolean
+}
+
+export function AgentMessageRenderer({ content, onApplyCode, showApply }: AgentMessageRendererProps) {
+  const blocks = parseAgentMessageBlocks(content)
+
+  if (blocks.length === 1 && blocks[0].type === 'text') {
+    return (
+      <MarkdownMessage content={blocks[0].content} onApplyCode={onApplyCode} showApply={showApply} />
+    )
+  }
+
+  return (
+    <div className="space-y-2 text-text-secondary">
+      {blocks.map((block, i) => {
+        switch (block.type) {
+          case 'file': {
+            const name = block.path.split(/[/\\]/).pop() || block.path
+            const lang = detectLanguage(name)
+            return (
+              <CodeBox
+                key={i}
+                meta={{ language: lang, filename: block.path, code: block.content }}
+                defaultCollapsed
+                variant="agent"
+              />
+            )
+          }
+          case 'mkdir':
+            return (
+              <ActionCard
+                key={i}
+                badge="DIR"
+                label={block.path}
+                stat={`+1`}
+                statType="add"
+              />
+            )
+          case 'delete':
+            return (
+              <ActionCard
+                key={i}
+                badge="DEL"
+                label={block.path}
+                stat={`-1`}
+                statType="del"
+              />
+            )
+          case 'rename':
+            return (
+              <ActionCard
+                key={i}
+                badge="MV"
+                label={`${block.from} → ${block.to}`}
+              />
+            )
+          case 'run':
+            return (
+              <ActionCard
+                key={i}
+                badge="RUN"
+                label={block.commands.join(' · ')}
+                detail={block.commands.length > 1 ? `${block.commands.length} commands` : undefined}
+                expandable
+                body={block.commands.map((c) => `$ ${c}`).join('\n')}
+              />
+            )
+          case 'summary':
+            return (
+              <div key={i} className="agent-summary">
+                {block.content.split('\n').map((line, j) => (
+                  <div key={j} className="agent-summary-line">
+                    {line.replace(/^✓\s*\*\*/, '').replace(/\*\*/g, '').replace(/^⚠\s*/, 'Warning: ')}
+                  </div>
+                ))}
+              </div>
+            )
+          case 'text':
+            return (
+              <MarkdownMessage
+                key={i}
+                content={block.content}
+                onApplyCode={onApplyCode}
+                showApply={showApply}
+              />
+            )
+          default:
+            return null
+        }
+      })}
+    </div>
+  )
+}

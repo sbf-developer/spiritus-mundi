@@ -35,6 +35,10 @@ const api = {
   createFile: (dir: string, name: string) => ipcRenderer.invoke('fs:createFile', dir, name),
   createFolder: (dir: string, name: string) => ipcRenderer.invoke('fs:createFolder', dir, name),
   deletePath: (path: string) => ipcRenderer.invoke('fs:delete', path),
+  renamePath: (oldPath: string, newPath: string) =>
+    ipcRenderer.invoke('fs:rename', oldPath, newPath) as Promise<{ success: boolean; path?: string; error?: string }>,
+  mkdirPath: (dirPath: string) =>
+    ipcRenderer.invoke('fs:mkdir', dirPath) as Promise<{ success: boolean; path?: string; error?: string }>,
   refreshTree: (root: string) => ipcRenderer.invoke('fs:refreshTree', root),
 
   onFsChanged: (cb: (tree: FileEntry[]) => void) => {

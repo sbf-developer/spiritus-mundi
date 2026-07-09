@@ -52,12 +52,7 @@ function renderInline(text: string) {
 }
 
 export function MarkdownMessage({ content, isUser, onApplyCode, showApply }: MarkdownMessageProps) {
-  const display = content.replace(/<file\s+path=["'][^"']+["']\s*>[\s\S]*?<\/file>/gi, (m) => {
-    const pathMatch = m.match(/path=["']([^"']+)["']/)
-    return `\n📄 **${pathMatch?.[1] ?? 'file'}** *(applied to project)*\n`
-  })
-
-  const blocks = parseBlocks(display)
+  const blocks = parseBlocks(content)
 
   return (
     <div className={`space-y-1.5 ${isUser ? 'text-text-primary' : 'text-text-secondary'}`}>

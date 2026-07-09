@@ -176,6 +176,7 @@ ipcMain.handle('fs:readFileBase64', async (_e, filePath: string) => {
 
 ipcMain.handle('fs:writeFile', async (_e, filePath: string, content: string) => {
   try {
+    await fs.mkdir(path.dirname(filePath), { recursive: true })
     await fs.writeFile(filePath, content, 'utf-8')
     return { success: true }
   } catch (err) {

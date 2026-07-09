@@ -17,7 +17,10 @@ export interface ChatMessage {
   role: 'user' | 'assistant' | 'system'
   content: string
   timestamp: number
+  appliedFiles?: string[]
 }
+
+export type ChatMode = 'chat' | 'agent'
 
 interface IDEState {
   rootPath: string | null
@@ -35,6 +38,7 @@ interface IDEState {
   settings: AISettings
   chatMessages: ChatMessage[]
   isStreaming: boolean
+  chatMode: ChatMode
 
   setRootPath: (path: string | null) => void
   setFileTree: (tree: FileEntry[]) => void
@@ -56,6 +60,8 @@ interface IDEState {
   updateLastAssistantMessage: (content: string) => void
   setIsStreaming: (v: boolean) => void
   clearChat: () => void
+  setChatMode: (mode: ChatMode) => void
+  setMessageAppliedFiles: (id: string, files: string[]) => void
 }
 
 export const defaultSettings: AISettings = {
@@ -98,6 +104,7 @@ export const useIDEStore = create<IDEState>((set, get) => ({
   settings: defaultSettings,
   chatMessages: [],
   isStreaming: false,
+  chatMode: 'agent',
 
   setRootPath: (path) => set({ rootPath: path }),
   setFileTree: (tree) => set({ fileTree: tree }),
@@ -166,4 +173,11 @@ export const useIDEStore = create<IDEState>((set, get) => ({
 
   setIsStreaming: (v) => set({ isStreaming: v }),
   clearChat: () => set({ chatMessages: [] }),
+  setChatMode: (mode) => set({ chatMode: mode }),
+  setMessageAppliedFiles: (id, files) =>
+    set({
+      chatMessages: get().chatMessages.map((m) =>
+        m.id === id ? { ...m, appliedFiles: files } : m
+      ),
+    }),
 }))

@@ -134,38 +134,42 @@ export default function App() {
           </>
         )}
 
-        {/* Main */}
-        <div className="flex flex-col flex-1 min-w-0">
-          <div className="flex flex-1 min-h-0">
-            <EditorArea onOpenFolder={handleOpenFolder} />
+        {/* Main: editor + terminal left, chat full-height right */}
+        <div className="flex flex-1 min-h-0 min-w-0">
+          <div className="flex flex-col flex-1 min-w-0">
+            <div className="flex-1 min-h-0">
+              <EditorArea onOpenFolder={handleOpenFolder} />
+            </div>
 
-            {showChat && (
+            {showTerminal && (
               <>
                 <ResizeHandle
-                  direction="horizontal"
-                  onResize={(delta) => setChatWidth(chatWidth - delta)}
+                  direction="vertical"
+                  onResize={(delta) => setTerminalHeight(terminalHeight - delta)}
                 />
                 <div
-                  className="shrink-0 bg-surface-raised overflow-hidden border-l border-border-subtle"
-                  style={{ width: chatWidth }}
+                  className="shrink-0 bg-surface overflow-hidden border-t border-border-subtle"
+                  style={{ height: terminalHeight }}
                 >
-                  <ChatPanel />
+                  <TerminalPanel />
                 </div>
               </>
             )}
           </div>
 
-          {showTerminal && (
+          {showChat && (
             <>
               <ResizeHandle
-                direction="vertical"
-                onResize={(delta) => setTerminalHeight(terminalHeight - delta)}
+                direction="horizontal"
+                onResize={(delta) => setChatWidth(chatWidth - delta)}
               />
               <div
-                className="shrink-0 bg-surface overflow-hidden border-t border-border-subtle"
-                style={{ height: terminalHeight }}
+                className={`shrink-0 bg-surface-raised overflow-hidden border-l border-border-subtle flex flex-col ${
+                  showTerminal ? 'rounded-bl-xl' : ''
+                }`}
+                style={{ width: chatWidth }}
               >
-                <TerminalPanel />
+                <ChatPanel />
               </div>
             </>
           )}

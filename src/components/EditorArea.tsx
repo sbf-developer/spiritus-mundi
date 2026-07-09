@@ -1,6 +1,6 @@
 import { useRef, useCallback, useEffect } from 'react'
 import Editor, { OnMount } from '@monaco-editor/react'
-import { X } from 'lucide-react'
+import { X, FolderOpen } from 'lucide-react'
 import { useIDEStore } from '../store/ideStore'
 import { getMonacoTheme } from '../lib/theme'
 import { monaco } from '../monacoSetup'
@@ -52,7 +52,8 @@ export function EditorArea({ onOpenFolder }: EditorAreaProps) {
               <p className="text-[12px] text-text-muted mb-5 leading-relaxed">
                 Open a folder to browse files, edit code, and chat with your AI.
               </p>
-              <button onClick={onOpenFolder} className="btn-primary">
+              <button onClick={onOpenFolder} className="btn-soft">
+                <FolderOpen size={14} strokeWidth={1.5} />
                 Open folder
               </button>
               <p className="text-[11px] text-text-muted mt-3">Ctrl+O</p>

@@ -205,10 +205,6 @@ export function ChatContextBar({ input, setInput, inputRef, userQuery }: ChatCon
           })}
         </div>
       )}
-
-      <p className="px-3 pt-1.5 text-[10px] text-text-muted">
-        Type <span className="font-mono">@</span> for terminal, files, folders, selection · Ctrl+Shift+L adds selection
-      </p>
     </div>
   )
 }

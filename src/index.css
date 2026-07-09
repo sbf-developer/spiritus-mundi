@@ -301,3 +301,171 @@ input[type='range']::-moz-range-thumb {
   border: 2px solid var(--bg-base);
   cursor: pointer;
 }
+
+/* Chat codeboxes (Cursor-style) */
+.codebox {
+  border-radius: 8px;
+  border: 1px solid var(--border-default);
+  overflow: hidden;
+  background: var(--bg-overlay);
+}
+
+.codebox-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-raised);
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s;
+}
+
+.codebox-header:hover {
+  background: var(--bg-hover);
+}
+
+.codebox-chevron {
+  color: var(--text-muted);
+  flex-shrink: 0;
+  transition: transform 0.15s;
+}
+
+.codebox-chevron-open {
+  transform: rotate(90deg);
+}
+
+.codebox-file-icon {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.codebox-filename {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-primary);
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.codebox-stats {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 4px;
+  font-size: 10px;
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-weight: 500;
+}
+
+.codebox-stat-add {
+  color: #3fb950;
+}
+
+.codebox-stat-del {
+  color: #f85149;
+}
+
+html[data-theme='light'] .codebox-stat-add {
+  color: #1a7f37;
+}
+
+html[data-theme='light'] .codebox-stat-del {
+  color: #cf222e;
+}
+
+.codebox-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.codebox-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  font-size: 10px;
+  color: var(--text-muted);
+  border-radius: 4px;
+  transition: color 0.12s, background 0.12s;
+}
+
+.codebox-action-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-active);
+}
+
+.codebox-body {
+  overflow-x: auto;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.codebox-pre {
+  margin: 0;
+  padding: 0;
+  font-size: 11px;
+  line-height: 1.55;
+  font-family: 'JetBrains Mono', Consolas, monospace;
+}
+
+.codebox-line {
+  padding: 0 12px;
+  white-space: pre;
+  min-height: 1.55em;
+}
+
+.codebox-line code {
+  font-family: inherit;
+  color: var(--text-primary);
+}
+
+.codebox-line-ctx {
+  background: transparent;
+}
+
+.codebox-line-add {
+  background: rgba(63, 185, 80, 0.12);
+  box-shadow: inset 3px 0 0 #3fb950;
+}
+
+.codebox-line-del {
+  background: rgba(248, 81, 73, 0.12);
+  box-shadow: inset 3px 0 0 #f85149;
+}
+
+.codebox-line-meta {
+  background: var(--bg-active);
+  color: var(--text-muted);
+}
+
+html[data-theme='light'] .codebox-line-add {
+  background: rgba(26, 127, 55, 0.1);
+  box-shadow: inset 3px 0 0 #1a7f37;
+}
+
+html[data-theme='light'] .codebox-line-del {
+  background: rgba(207, 34, 46, 0.1);
+  box-shadow: inset 3px 0 0 #cf222e;
+}
+
+.codebox-kw {
+  color: #ff7b72;
+}
+
+html[data-theme='light'] .codebox-kw {
+  color: #cf222e;
+}
+
+.codebox-str {
+  color: #a5d6ff;
+}
+
+html[data-theme='light'] .codebox-str {
+  color: #0550ae;
+}

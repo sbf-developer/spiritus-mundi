@@ -212,8 +212,8 @@ export function ChatPanel() {
 
   const placeholder =
     chatMode === 'agent'
-      ? 'Build or edit… type @ for terminal, files, codebase'
-      : 'Ask a question… type @ to attach context'
+      ? 'Build or edit something in your project...'
+      : 'Ask a question...'
 
   return (
     <div className="flex flex-col h-full">
@@ -296,7 +296,7 @@ export function ChatPanel() {
             placeholder={placeholder}
             rows={3}
             disabled={isStreaming}
-            className="w-full bg-transparent px-3 pt-1 pb-10 text-[12px] leading-relaxed text-text-primary placeholder:text-text-muted resize-none focus:outline-none disabled:opacity-50"
+            className="w-full bg-transparent px-3 pt-3 pb-10 text-[12px] leading-relaxed text-text-primary placeholder:text-text-muted resize-none focus:outline-none disabled:opacity-50"
           />
           <div className="absolute inset-x-2 bottom-2 flex items-center justify-between pointer-events-none">
             <div className="pointer-events-auto">

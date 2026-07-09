@@ -17,7 +17,7 @@ const MODES: { id: ChatMode; label: string; icon: React.ReactNode; desc: string 
   },
 ]
 
-export function ChatModeSelector() {
+export function ChatModeSelector({ inline = false }: { inline?: boolean }) {
   const { chatMode, setChatMode, settings } = useIDEStore()
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -35,12 +35,19 @@ export function ChatModeSelector() {
   return (
     <div ref={ref} className="relative">
       <button
+        type="button"
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-1.5 px-2 py-1 rounded-md border border-border-default bg-surface-overlay hover:bg-surface-hover transition-colors"
+        className={
+          inline
+            ? 'flex items-center gap-1 px-1.5 py-1 rounded-md text-text-muted hover:text-text-secondary hover:bg-surface-hover transition-colors'
+            : 'flex items-center gap-1.5 px-2 py-1 rounded-md border border-border-default bg-surface-overlay hover:bg-surface-hover transition-colors'
+        }
       >
-        <span className="text-text-muted">{current.icon}</span>
-        <span className="text-[11px] font-medium text-text-primary">{current.label}</span>
-        <ChevronDown size={11} className="text-text-muted" />
+        <span className={inline ? 'opacity-70' : 'text-text-muted'}>{current.icon}</span>
+        <span className={`text-[11px] font-medium ${inline ? 'text-text-secondary' : 'text-text-primary'}`}>
+          {current.label}
+        </span>
+        <ChevronDown size={10} strokeWidth={2} className="opacity-50" />
       </button>
 
       {open && (

@@ -235,31 +235,34 @@ export function ChatPanel() {
         <div ref={messagesEndRef} />
       </div>
 
-      <div className="p-3 border-t border-border-subtle shrink-0 space-y-2">
-        <ChatModeSelector />
-        <div className="relative bg-surface-overlay border border-border-default rounded-lg focus-within:border-text-muted transition-colors">
+      <div className="p-3 border-t border-border-subtle shrink-0">
+        <div className="relative bg-surface-overlay border border-border-default rounded-xl focus-within:border-text-muted/40 transition-colors">
           <textarea
             ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={placeholder}
-            rows={2}
+            rows={3}
             disabled={isStreaming}
-            className="w-full bg-transparent px-3 pt-2.5 pb-9 text-[12px] text-text-primary placeholder:text-text-muted resize-none focus:outline-none disabled:opacity-50"
+            className="w-full bg-transparent px-3 pt-3 pb-10 text-[12px] leading-relaxed text-text-primary placeholder:text-text-muted resize-none focus:outline-none disabled:opacity-50"
           />
-          <div className="absolute right-2 bottom-2 flex items-center gap-2">
-            <span className="text-[10px] text-text-muted hidden sm:inline">↵ send</span>
+          <div className="absolute inset-x-2 bottom-2 flex items-center justify-between pointer-events-none">
+            <div className="pointer-events-auto">
+              <ChatModeSelector inline />
+            </div>
             <button
+              type="button"
               onClick={handleSend}
               disabled={!input.trim() || isStreaming}
-              className="w-7 h-7 flex items-center justify-center rounded-md disabled:opacity-25 disabled:cursor-not-allowed transition-opacity hover:opacity-90"
-              style={{
-                background: 'var(--btn-primary-bg)',
-                color: 'var(--btn-primary-text)',
-              }}
+              title="Send"
+              className={`pointer-events-auto flex items-center justify-center w-7 h-7 rounded-lg transition-all duration-150 ${
+                input.trim() && !isStreaming
+                  ? 'bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)] hover:opacity-85 active:scale-95'
+                  : 'bg-surface-hover text-text-muted opacity-35 cursor-not-allowed'
+              }`}
             >
-              <ArrowUp size={14} strokeWidth={2} />
+              <ArrowUp size={15} strokeWidth={2.25} />
             </button>
           </div>
         </div>

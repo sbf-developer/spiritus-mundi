@@ -1,5 +1,5 @@
 import { useEffect, useCallback } from 'react'
-import { Files, Settings, MessageSquare, Terminal } from 'lucide-react'
+import { Files, Settings, Terminal } from 'lucide-react'
 import { useIDEStore } from './store/ideStore'
 import { FileExplorer } from './components/FileExplorer'
 import { SettingsPanel } from './components/SettingsPanel'
@@ -68,7 +68,13 @@ export default function App() {
 
   return (
     <div className="flex flex-col h-full bg-surface">
-      <TitleBar onOpenFolder={handleOpenFolder} theme={theme} onToggleTheme={toggleTheme} />
+      <TitleBar
+        onOpenFolder={handleOpenFolder}
+        theme={theme}
+        onToggleTheme={toggleTheme}
+        showChat={showChat}
+        onToggleChat={toggleChat}
+      />
 
       <div className="flex flex-1 min-h-0">
         {/* Activity bar */}
@@ -105,12 +111,6 @@ export default function App() {
             active={showTerminal}
             onClick={toggleTerminal}
             title="Terminal"
-          />
-          <ActivityButton
-            icon={<MessageSquare size={18} strokeWidth={1.5} />}
-            active={showChat}
-            onClick={toggleChat}
-            title="Chat"
           />
         </nav>
 

@@ -33,6 +33,9 @@ export default defineConfig({
   resolve: {
     alias: { '@': path.resolve(__dirname, 'src') },
   },
+  optimizeDeps: {
+    include: ['monaco-editor'],
+  },
   build: {
     outDir: 'dist',
   },

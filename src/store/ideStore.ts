@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { FileEntry, AISettings, Theme } from './vite-env.d'
+import { applyTheme } from '../lib/theme'
 
 export interface OpenTab {
   path: string
@@ -7,6 +8,8 @@ export interface OpenTab {
   content: string
   isDirty: boolean
   language: string
+  viewMode?: 'code' | 'image'
+  previewDataUrl?: string
 }
 
 export interface ChatMessage {
@@ -143,7 +146,10 @@ export const useIDEStore = create<IDEState>((set, get) => ({
   toggleChat: () => set({ showChat: !get().showChat }),
   toggleSidebar: () => set({ showSidebar: !get().showSidebar }),
   setActivePanel: (panel) => set({ activePanel: panel }),
-  setTheme: (theme) => set({ theme }),
+  setTheme: (theme) => {
+    applyTheme(theme)
+    set({ theme })
+  },
   setSettings: (s) => set({ settings: s }),
 
   addChatMessage: (msg) =>

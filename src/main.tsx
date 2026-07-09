@@ -1,9 +1,11 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
+import './monacoSetup'
 import App from './App'
+import { applyTheme } from './lib/theme'
 import './index.css'
 
-document.documentElement.setAttribute('data-theme', 'dark')
+applyTheme('dark')
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

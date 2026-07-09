@@ -1,7 +1,9 @@
-import { useRef, useCallback } from 'react'
+import { useRef, useCallback, useEffect } from 'react'
 import Editor, { OnMount } from '@monaco-editor/react'
 import { X } from 'lucide-react'
 import { useIDEStore } from '../store/ideStore'
+import { getMonacoTheme } from '../lib/theme'
+import { monaco } from '../monacoSetup'
 import type { editor } from 'monaco-editor'
 
 interface EditorAreaProps {
@@ -14,20 +16,24 @@ export function EditorArea({ onOpenFolder }: EditorAreaProps) {
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null)
 
   const activeTab = tabs.find((t) => t.path === activeTabPath)
-  const monacoTheme = theme === 'dark' ? 'vs-dark' : 'vs'
+  const monacoTheme = getMonacoTheme(theme)
+
+  useEffect(() => {
+    monaco.editor.setTheme(monacoTheme)
+  }, [monacoTheme])
 
   const handleSave = useCallback(async () => {
-    if (!activeTab) return
+    if (!activeTab || activeTab.viewMode === 'image') return
     const result = await window.spiritus.writeFile(activeTab.path, activeTab.content)
     if (result.success) markTabSaved(activeTab.path)
   }, [activeTab, markTabSaved])
 
-  const handleEditorMount: OnMount = (editor, monaco) => {
-    editorRef.current = editor
-    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
+  const handleEditorMount: OnMount = (editorInstance, monacoApi) => {
+    editorRef.current = editorInstance
+    editorInstance.addCommand(monacoApi.KeyMod.CtrlCmd | monacoApi.KeyCode.KeyS, () => {
       handleSave()
     })
-    editor.focus()
+    editorInstance.focus()
   }
 
   const handleChange = (value: string | undefined) => {
@@ -99,43 +105,55 @@ export function EditorArea({ onOpenFolder }: EditorAreaProps) {
 
       {activeTab && (
         <div className="flex-1 min-h-0">
-          <Editor
-            key={`${activeTab.path}-${theme}`}
-            height="100%"
-            language={activeTab.language}
-            value={activeTab.content}
-            theme={monacoTheme}
-            onChange={handleChange}
-            onMount={handleEditorMount}
-            options={{
-              fontSize: 13,
-              fontFamily: "'JetBrains Mono', 'Fira Code', Consolas, monospace",
-              fontLigatures: true,
-              minimap: { enabled: false },
-              scrollBeyondLastLine: false,
-              padding: { top: 16, bottom: 8 },
-              lineNumbers: 'on',
-              lineHeight: 20,
-              renderLineHighlight: 'line',
-              cursorBlinking: 'smooth',
-              cursorWidth: 1,
-              smoothScrolling: true,
-              tabSize: 2,
-              wordWrap: 'off',
-              bracketPairColorization: { enabled: true },
-              automaticLayout: true,
-              overviewRulerBorder: false,
-              hideCursorInOverviewRuler: true,
-              scrollbar: {
-                verticalScrollbarSize: 5,
-                horizontalScrollbarSize: 5,
-              },
-              guides: {
-                indentation: true,
-                bracketPairs: true,
-              },
-            }}
-          />
+          {activeTab.viewMode === 'image' && activeTab.previewDataUrl ? (
+            <div className="h-full flex items-center justify-center bg-surface p-6 overflow-auto">
+              <img
+                src={activeTab.previewDataUrl}
+                alt={activeTab.name}
+                className="max-w-full max-h-full object-contain"
+              />
+            </div>
+          ) : (
+            <Editor
+              key={activeTab.path}
+              height="100%"
+              language={activeTab.language}
+              value={activeTab.content}
+              theme={monacoTheme}
+              onChange={handleChange}
+              onMount={handleEditorMount}
+              loading={null}
+              options={{
+                fontSize: 13,
+                fontFamily: "'JetBrains Mono', 'Fira Code', Consolas, monospace",
+                fontLigatures: true,
+                minimap: { enabled: false },
+                scrollBeyondLastLine: false,
+                padding: { top: 16, bottom: 8 },
+                lineNumbers: 'on',
+                lineHeight: 20,
+                renderLineHighlight: 'line',
+                cursorBlinking: 'smooth',
+                cursorWidth: 1,
+                smoothScrolling: true,
+                tabSize: 2,
+                wordWrap: 'off',
+                bracketPairColorization: { enabled: true },
+                automaticLayout: true,
+                overviewRulerBorder: false,
+                hideCursorInOverviewRuler: true,
+                readOnly: false,
+                scrollbar: {
+                  verticalScrollbarSize: 5,
+                  horizontalScrollbarSize: 5,
+                },
+                guides: {
+                  indentation: true,
+                  bracketPairs: true,
+                },
+              }}
+            />
+          )}
         </div>
       )}
     </div>

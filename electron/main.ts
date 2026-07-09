@@ -10,15 +10,18 @@ let terminalCounter = 0
 
 const isDev = !app.isPackaged
 
+const isMac = process.platform === 'darwin'
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
     minWidth: 900,
     minHeight: 600,
-    backgroundColor: '#0d0d0d',
-    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
-    frame: process.platform !== 'darwin',
+    backgroundColor: '#181818',
+    frame: isMac,
+    titleBarStyle: isMac ? 'hiddenInset' : 'default',
+    autoHideMenuBar: !isMac,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -28,7 +31,8 @@ function createWindow() {
   })
 
   if (isDev) {
-    mainWindow.loadURL('http://localhost:5173')
+    const devUrl = process.env.VITE_DEV_SERVER_URL ?? 'http://localhost:5173'
+    mainWindow.loadURL(devUrl)
   } else {
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'))
   }
@@ -71,6 +75,7 @@ function createWindow() {
     },
   ])
   Menu.setApplicationMenu(menu)
+  if (!isMac) mainWindow.setMenuBarVisibility(false)
 
   mainWindow.on('closed', () => {
     mainWindow = null
@@ -149,6 +154,26 @@ ipcMain.handle('fs:readFile', async (_e, filePath: string) => {
   }
 })
 
+ipcMain.handle('fs:readFileBase64', async (_e, filePath: string) => {
+  try {
+    const buffer = await fs.readFile(filePath)
+    const ext = path.extname(filePath).slice(1).toLowerCase()
+    const mime: Record<string, string> = {
+      png: 'image/png',
+      jpg: 'image/jpeg',
+      jpeg: 'image/jpeg',
+      gif: 'image/gif',
+      webp: 'image/webp',
+      ico: 'image/x-icon',
+      bmp: 'image/bmp',
+    }
+    const dataUrl = `data:${mime[ext] || 'application/octet-stream'};base64,${buffer.toString('base64')}`
+    return { success: true, dataUrl }
+  } catch (err) {
+    return { success: false, error: String(err) }
+  }
+})
+
 ipcMain.handle('fs:writeFile', async (_e, filePath: string, content: string) => {
   try {
     await fs.writeFile(filePath, content, 'utf-8')
@@ -212,25 +237,30 @@ ipcMain.handle('terminal:create', (_e, cwd?: string) => {
   const id = ++terminalCounter
   const shell = process.platform === 'win32' ? 'powershell.exe' : process.env.SHELL || '/bin/bash'
 
-  const term = pty.spawn(shell, [], {
-    name: 'xterm-256color',
-    cols: 80,
-    rows: 24,
-    cwd: cwd || process.env.HOME || process.env.USERPROFILE,
-    env: process.env as Record<string, string>,
-  })
+  try {
+    const term = pty.spawn(shell, [], {
+      name: 'xterm-256color',
+      cols: 80,
+      rows: 24,
+      cwd: cwd || process.env.HOME || process.env.USERPROFILE,
+      env: process.env as Record<string, string>,
+      ...(process.platform === 'win32' ? { useConpty: false } : {}),
+    })
 
-  term.onData((data) => {
-    mainWindow?.webContents.send('terminal:data', id, data)
-  })
+    term.onData((data) => {
+      mainWindow?.webContents.send('terminal:data', id, data)
+    })
 
-  term.onExit(() => {
-    terminals.delete(id)
-    mainWindow?.webContents.send('terminal:exit', id)
-  })
+    term.onExit(() => {
+      terminals.delete(id)
+      mainWindow?.webContents.send('terminal:exit', id)
+    })
 
-  terminals.set(id, term)
-  return id
+    terminals.set(id, term)
+    return id
+  } catch (err) {
+    throw new Error(`Terminal failed to start: ${err instanceof Error ? err.message : String(err)}`)
+  }
 })
 
 ipcMain.on('terminal:input', (_e, id: number, data: string) => {
@@ -277,3 +307,9 @@ ipcMain.on('window:maximize', () => {
   else mainWindow?.maximize()
 })
 ipcMain.on('window:close', () => mainWindow?.close())
+
+const THEME_BG: Record<string, string> = { dark: '#181818', light: '#ffffff' }
+
+ipcMain.on('window:setTheme', (_e, theme: string) => {
+  if (mainWindow) mainWindow.setBackgroundColor(THEME_BG[theme] ?? THEME_BG.dark)
+})

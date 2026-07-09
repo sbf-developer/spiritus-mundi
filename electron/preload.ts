@@ -24,10 +24,13 @@ export interface AppSettings {
 }
 
 const api = {
+  platform: process.platform,
+
   openFolder: (): Promise<{ path: string; tree: FileEntry[] } | null> =>
     ipcRenderer.invoke('dialog:openFolder'),
 
   readFile: (path: string) => ipcRenderer.invoke('fs:readFile', path),
+  readFileBase64: (path: string) => ipcRenderer.invoke('fs:readFileBase64', path),
   writeFile: (path: string, content: string) => ipcRenderer.invoke('fs:writeFile', path, content),
   createFile: (dir: string, name: string) => ipcRenderer.invoke('fs:createFile', dir, name),
   createFolder: (dir: string, name: string) => ipcRenderer.invoke('fs:createFolder', dir, name),
@@ -72,6 +75,7 @@ const api = {
     minimize: () => ipcRenderer.send('window:minimize'),
     maximize: () => ipcRenderer.send('window:maximize'),
     close: () => ipcRenderer.send('window:close'),
+    setTheme: (theme: Theme) => ipcRenderer.send('window:setTheme', theme),
   },
 }
 

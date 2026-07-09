@@ -221,26 +221,56 @@ body,
 }
 
 .panel-resize-h {
-  width: 1px;
+  width: 5px;
+  margin: 0 -2px;
   cursor: col-resize;
-  background: var(--border-subtle);
-  transition: background 0.12s;
+  position: relative;
+  z-index: 10;
+  flex-shrink: 0;
 }
 
-.panel-resize-h:hover,
-.panel-resize-h:active {
+.panel-resize-h::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 1px;
+  background: var(--border-subtle);
+  transition: background 0.12s, width 0.12s;
+}
+
+.panel-resize-h:hover::after,
+.panel-resize-h:active::after {
+  width: 2px;
   background: var(--text-muted);
 }
 
 .panel-resize-v {
-  height: 1px;
+  height: 5px;
+  margin: -2px 0;
   cursor: row-resize;
-  background: var(--border-subtle);
-  transition: background 0.12s;
+  position: relative;
+  z-index: 10;
+  flex-shrink: 0;
 }
 
-.panel-resize-v:hover,
-.panel-resize-v:active {
+.panel-resize-v::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 1px;
+  background: var(--border-subtle);
+  transition: background 0.12s, height 0.12s;
+}
+
+.panel-resize-v:hover::after,
+.panel-resize-v:active::after {
+  height: 2px;
   background: var(--text-muted);
 }
 

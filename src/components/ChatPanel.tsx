@@ -6,12 +6,18 @@ import {
   buildAgentSystemPrompt,
   buildChatSystemPrompt,
   parseAgentEdits,
+  parseAgentCommands,
   applyAgentEdits,
+  applyAgentCommands,
   openEditedFilesInEditor,
+  stripFileTags,
+  stripRunTags,
 } from '../services/agentService'
 import { PanelHeader, IconButton } from './PanelHeader'
 import { MarkdownMessage } from './MarkdownMessage'
 import { ChatModeSelector } from './ChatModeSelector'
+import { ChatContextBar, formatUserMessageWithContext } from './ChatContextBar'
+import { formatContextForPrompt, parsePastedCodeContext } from '../services/contextService'
 
 export function ChatPanel() {
   const {
@@ -30,6 +36,9 @@ export function ChatPanel() {
     chatMode,
     openTab,
     setFileTree,
+    chatContextItems,
+    addContextItem,
+    clearContextItems,
   } = useIDEStore()
 
   const [input, setInput] = useState('')
@@ -67,13 +76,16 @@ export function ChatPanel() {
     }
 
     setInput('')
+    const contextSnapshot = [...chatContextItems]
+    const displayText = formatUserMessageWithContext(text, contextSnapshot)
     const userMsg = {
       id: crypto.randomUUID(),
       role: 'user' as const,
-      content: text,
+      content: displayText,
       timestamp: Date.now(),
     }
     addChatMessage(userMsg)
+    clearContextItems()
 
     const assistantMsg = {
       id: crypto.randomUUID(),
@@ -90,12 +102,15 @@ export function ChatPanel() {
         ? { path: activeFile.path, content: activeFile.content, language: activeFile.language }
         : null
 
-      const systemContext =
+      const contextBlock = formatContextForPrompt(contextSnapshot)
+      const baseSystem =
         chatMode === 'agent'
           ? buildAgentSystemPrompt(rootPath, fileTree, fileCtx)
-          : buildChatSystemPrompt(fileCtx, rootPath)
+          : buildChatSystemPrompt(fileCtx, rootPath, fileTree)
 
-      const allMessages = [...chatMessages, userMsg]
+      const systemContext = contextBlock ? `${baseSystem}\n\n${contextBlock}` : baseSystem
+
+      const allMessages = [...chatMessages, { ...userMsg, content: text }]
       let fullContent = ''
 
       for await (const chunk of streamChat(settings, allMessages, systemContext)) {
@@ -105,6 +120,9 @@ export function ChatPanel() {
 
       if (chatMode === 'agent' && rootPath) {
         const edits = parseAgentEdits(fullContent)
+        const commands = parseAgentCommands(fullContent)
+        const summaryParts: string[] = []
+
         if (edits.length > 0) {
           const { applied, errors } = await applyAgentEdits(rootPath, edits)
           if (applied.length > 0) {
@@ -112,12 +130,28 @@ export function ChatPanel() {
             const tree = await window.spiritus.refreshTree(rootPath)
             setFileTree(tree)
             setMessageAppliedFiles(assistantIdRef.current, applied)
-
-            const summary =
-              `\n\n---\n✓ **Applied ${applied.length} file${applied.length > 1 ? 's' : ''}:** ${applied.map((f) => `\`${f}\``).join(', ')}` +
-              (errors.length ? `\n⚠ ${errors.join('; ')}` : '')
-            updateLastAssistantMessage(fullContent + summary)
+            summaryParts.push(
+              `✓ **Applied ${applied.length} file${applied.length > 1 ? 's' : ''}:** ${applied.map((f) => `\`${f}\``).join(', ')}`
+            )
           }
+          if (errors.length) summaryParts.push(`⚠ ${errors.join('; ')}`)
+        }
+
+        if (commands.length > 0) {
+          useIDEStore.setState({ showTerminal: true })
+          await new Promise((r) => setTimeout(r, 200))
+          const { results, errors } = await applyAgentCommands(rootPath, commands)
+          const ok = results.filter((r) => r.success).map((r) => r.command)
+          if (ok.length) {
+            summaryParts.push(
+              `✓ **Ran ${ok.length} command${ok.length > 1 ? 's' : ''}:** ${ok.map((c) => `\`${c}\``).join(', ')}`
+            )
+          }
+          if (errors.length) summaryParts.push(`⚠ ${errors.join('; ')}`)
+        }
+
+        if (summaryParts.length > 0) {
+          updateLastAssistantMessage(fullContent + `\n\n---\n${summaryParts.join('\n')}`)
         }
       }
     } catch (err) {
@@ -154,6 +188,8 @@ export function ChatPanel() {
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
+      const pos = e.currentTarget.selectionStart ?? 0
+      if (input.slice(0, pos).match(/@([\w./-]*)$/)) return
       e.preventDefault()
       handleSend()
     }
@@ -165,10 +201,19 @@ export function ChatPanel() {
     setTimeout(() => setCopiedId(null), 2000)
   }
 
+  const handlePaste = (e: React.ClipboardEvent) => {
+    const pasted = e.clipboardData.getData('text')
+    const codeCtx = parsePastedCodeContext(pasted, rootPath)
+    if (codeCtx && pasted.split('\n').length >= 3) {
+      e.preventDefault()
+      addContextItem(codeCtx)
+    }
+  }
+
   const placeholder =
     chatMode === 'agent'
-      ? 'Build or edit something in your project...'
-      : 'Ask a question...'
+      ? 'Build or edit… type @ for terminal, files, codebase'
+      : 'Ask a question… type @ to attach context'
 
   return (
     <div className="flex flex-col h-full">
@@ -222,7 +267,11 @@ export function ChatPanel() {
             </div>
             {msg.content ? (
               <MarkdownMessage
-                content={msg.content}
+                content={
+                  msg.role === 'assistant' && chatMode === 'agent'
+                    ? stripRunTags(stripFileTags(msg.content))
+                    : msg.content
+                }
                 isUser={msg.role === 'user'}
                 onApplyCode={handleApplyCode}
                 showApply={chatMode === 'chat'}
@@ -237,15 +286,17 @@ export function ChatPanel() {
 
       <div className="p-3 border-t border-border-subtle shrink-0">
         <div className="relative bg-surface-overlay border border-border-default rounded-xl focus-within:border-text-muted/40 transition-colors">
+          <ChatContextBar input={input} setInput={setInput} inputRef={inputRef} userQuery={input} />
           <textarea
             ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
             placeholder={placeholder}
             rows={3}
             disabled={isStreaming}
-            className="w-full bg-transparent px-3 pt-3 pb-10 text-[12px] leading-relaxed text-text-primary placeholder:text-text-muted resize-none focus:outline-none disabled:opacity-50"
+            className="w-full bg-transparent px-3 pt-1 pb-10 text-[12px] leading-relaxed text-text-primary placeholder:text-text-muted resize-none focus:outline-none disabled:opacity-50"
           />
           <div className="absolute inset-x-2 bottom-2 flex items-center justify-between pointer-events-none">
             <div className="pointer-events-auto">

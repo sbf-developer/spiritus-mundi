@@ -64,6 +64,18 @@ const api = {
       ipcRenderer.on('terminal:exit', handler)
       return () => ipcRenderer.removeListener('terminal:exit', handler)
     },
+    exec: (cwd: string, command: string) =>
+      ipcRenderer.invoke('terminal:exec', cwd, command) as Promise<{
+        success: boolean
+        stdout: string
+        stderr: string
+        exitCode: number
+      }>,
+    onInject: (cb: (text: string) => void) => {
+      const handler = (_: unknown, text: string) => cb(text)
+      ipcRenderer.on('terminal:inject', handler)
+      return () => ipcRenderer.removeListener('terminal:inject', handler)
+    },
   },
 
   settings: {

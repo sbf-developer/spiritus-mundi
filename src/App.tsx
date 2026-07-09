@@ -23,9 +23,9 @@ export default function App() {
     showSidebar,
     activePanel,
     setActivePanel,
-    setSidebarWidth,
-    setChatWidth,
-    setTerminalHeight,
+    adjustSidebarWidth,
+    adjustChatWidth,
+    adjustTerminalHeight,
     toggleTerminal,
     toggleChat,
   } = useIDEStore()
@@ -129,15 +129,15 @@ export default function App() {
             </div>
             <ResizeHandle
               direction="horizontal"
-              onResize={(delta) => setSidebarWidth(sidebarWidth + delta)}
+              onResize={adjustSidebarWidth}
             />
           </>
         )}
 
         {/* Main: editor + terminal left, chat full-height right */}
         <div className="flex flex-1 min-h-0 min-w-0">
-          <div className="flex flex-col flex-1 min-w-0">
-            <div className="flex-1 min-h-0">
+          <div className="flex flex-col flex-1 min-w-0 min-h-0 overflow-hidden">
+            <div className="flex-1 min-h-0 overflow-hidden">
               <EditorArea onOpenFolder={handleOpenFolder} />
             </div>
 
@@ -145,10 +145,10 @@ export default function App() {
               <>
                 <ResizeHandle
                   direction="vertical"
-                  onResize={(delta) => setTerminalHeight(terminalHeight - delta)}
+                  onResize={adjustTerminalHeight}
                 />
                 <div
-                  className="shrink-0 bg-surface overflow-hidden border-t border-border-subtle"
+                  className="shrink-0 bg-surface overflow-hidden"
                   style={{ height: terminalHeight }}
                 >
                   <TerminalPanel />
@@ -161,10 +161,10 @@ export default function App() {
             <>
               <ResizeHandle
                 direction="horizontal"
-                onResize={(delta) => setChatWidth(chatWidth - delta)}
+                onResize={adjustChatWidth}
               />
               <div
-                className={`shrink-0 bg-surface-raised overflow-hidden border-l border-border-subtle flex flex-col ${
+                className={`shrink-0 bg-surface-raised overflow-hidden flex flex-col ${
                   showTerminal ? 'rounded-bl-xl' : ''
                 }`}
                 style={{ width: chatWidth }}

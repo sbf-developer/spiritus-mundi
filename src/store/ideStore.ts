@@ -1,6 +1,10 @@
 import { create } from 'zustand'
 import type { FileEntry, AISettings, Theme } from './vite-env.d'
 import { applyTheme } from '../lib/theme'
+import type { ContextItem, EditorSelection } from '../services/contextService'
+import { createTerminalContext, createCodeContext } from '../services/contextService'
+
+export type { ContextItem, EditorSelection }
 
 export interface OpenTab {
   path: string
@@ -39,6 +43,9 @@ interface IDEState {
   chatMessages: ChatMessage[]
   isStreaming: boolean
   chatMode: ChatMode
+  chatContextItems: ContextItem[]
+  terminalBuffer: string
+  editorSelection: EditorSelection | null
 
   setRootPath: (path: string | null) => void
   setFileTree: (tree: FileEntry[]) => void
@@ -50,6 +57,9 @@ interface IDEState {
   setSidebarWidth: (w: number) => void
   setChatWidth: (w: number) => void
   setTerminalHeight: (h: number) => void
+  adjustSidebarWidth: (delta: number) => void
+  adjustChatWidth: (delta: number) => void
+  adjustTerminalHeight: (delta: number) => void
   toggleTerminal: () => void
   toggleChat: () => void
   toggleSidebar: () => void
@@ -62,6 +72,13 @@ interface IDEState {
   clearChat: () => void
   setChatMode: (mode: ChatMode) => void
   setMessageAppliedFiles: (id: string, files: string[]) => void
+  addContextItem: (item: ContextItem) => void
+  removeContextItem: (id: string) => void
+  clearContextItems: () => void
+  appendTerminalOutput: (data: string) => void
+  setEditorSelection: (selection: EditorSelection | null) => void
+  addTerminalToChat: () => void
+  addSelectionToChat: () => void
 }
 
 export const defaultSettings: AISettings = {
@@ -105,6 +122,9 @@ export const useIDEStore = create<IDEState>((set, get) => ({
   chatMessages: [],
   isStreaming: false,
   chatMode: 'agent',
+  chatContextItems: [],
+  terminalBuffer: '',
+  editorSelection: null,
 
   setRootPath: (path) => set({ rootPath: path }),
   setFileTree: (tree) => set({ fileTree: tree }),
@@ -149,6 +169,12 @@ export const useIDEStore = create<IDEState>((set, get) => ({
   setSidebarWidth: (w) => set({ sidebarWidth: Math.max(180, Math.min(480, w)) }),
   setChatWidth: (w) => set({ chatWidth: Math.max(280, Math.min(600, w)) }),
   setTerminalHeight: (h) => set({ terminalHeight: Math.max(120, Math.min(600, h)) }),
+  adjustSidebarWidth: (delta) =>
+    set((s) => ({ sidebarWidth: Math.max(180, Math.min(480, s.sidebarWidth + delta)) })),
+  adjustChatWidth: (delta) =>
+    set((s) => ({ chatWidth: Math.max(280, Math.min(600, s.chatWidth - delta)) })),
+  adjustTerminalHeight: (delta) =>
+    set((s) => ({ terminalHeight: Math.max(120, Math.min(600, s.terminalHeight - delta)) })),
   toggleTerminal: () => set({ showTerminal: !get().showTerminal }),
   toggleChat: () => set({ showChat: !get().showChat }),
   toggleSidebar: () => set({ showSidebar: !get().showSidebar }),
@@ -180,4 +206,46 @@ export const useIDEStore = create<IDEState>((set, get) => ({
         m.id === id ? { ...m, appliedFiles: files } : m
       ),
     }),
+
+  addContextItem: (item) =>
+    set((s) => ({
+      chatContextItems: s.chatContextItems.some((c) => c.label === item.label && c.type === item.type)
+        ? s.chatContextItems
+        : [...s.chatContextItems, item],
+    })),
+
+  removeContextItem: (id) =>
+    set((s) => ({ chatContextItems: s.chatContextItems.filter((c) => c.id !== id) })),
+
+  clearContextItems: () => set({ chatContextItems: [] }),
+
+  appendTerminalOutput: (data) =>
+    set((s) => {
+      const combined = s.terminalBuffer + data
+      return { terminalBuffer: combined.length > 12000 ? combined.slice(-12000) : combined }
+    }),
+
+  setEditorSelection: (selection) => set({ editorSelection: selection }),
+
+  addTerminalToChat: () => {
+    const { terminalBuffer, addContextItem } = get()
+    const cleaned = createTerminalContext(terminalBuffer)
+    if (cleaned.content) addContextItem(cleaned)
+  },
+
+  addSelectionToChat: () => {
+    const { editorSelection, rootPath, addContextItem } = get()
+    if (!editorSelection) return
+    addContextItem(
+      createCodeContext(
+        editorSelection.path,
+        editorSelection.name,
+        editorSelection.startLine,
+        editorSelection.endLine,
+        editorSelection.content,
+        editorSelection.language,
+        rootPath
+      )
+    )
+  },
 }))

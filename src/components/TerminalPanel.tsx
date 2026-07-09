@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { Terminal as XTerm } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
-import { Plus } from 'lucide-react'
+import { Plus, MessageSquarePlus } from 'lucide-react'
 import { useIDEStore } from '../store/ideStore'
 import { getTerminalTheme } from '../lib/theme'
 import { PanelHeader, IconButton } from './PanelHeader'
@@ -16,7 +16,7 @@ interface TermInstance {
 export function TerminalPanel() {
   const containerRef = useRef<HTMLDivElement>(null)
   const termsRef = useRef<TermInstance[]>([])
-  const { rootPath, theme } = useIDEStore()
+  const { rootPath, theme, addTerminalToChat, showChat } = useIDEStore()
 
   const spawnTerminal = async () => {
     if (!containerRef.current) return
@@ -63,15 +63,22 @@ export function TerminalPanel() {
 
     const unsubData = window.spiritus.terminal.onData((id, data) => {
       termsRef.current.find((t) => t.id === id)?.xterm.write(data)
+      useIDEStore.getState().appendTerminalOutput(data)
     })
 
     const unsubExit = window.spiritus.terminal.onExit((id) => {
       termsRef.current.find((t) => t.id === id)?.xterm.write('\r\n\x1b[90m[Process exited]\x1b[0m\r\n')
     })
 
+    const unsubInject = window.spiritus.terminal.onInject((text) => {
+      termsRef.current[0]?.xterm.write(text)
+      useIDEStore.getState().appendTerminalOutput(text)
+    })
+
     return () => {
       unsubData()
       unsubExit()
+      unsubInject()
       termsRef.current.forEach((t) => {
         window.spiritus.terminal.kill(t.id)
         t.xterm.dispose()
@@ -95,16 +102,28 @@ export function TerminalPanel() {
     spawnTerminal()
   }
 
+  const handleAddToChat = () => {
+    addTerminalToChat()
+    if (!showChat) useIDEStore.setState({ showChat: true })
+  }
+
   return (
     <div className="flex flex-col h-full">
       <PanelHeader
         title="Terminal"
         actions={
-          <IconButton
-            icon={<Plus size={13} strokeWidth={1.5} />}
-            onClick={handleNewTerminal}
-            title="New terminal"
-          />
+          <>
+            <IconButton
+              icon={<MessageSquarePlus size={13} strokeWidth={1.5} />}
+              onClick={handleAddToChat}
+              title="Add terminal output to chat"
+            />
+            <IconButton
+              icon={<Plus size={13} strokeWidth={1.5} />}
+              onClick={handleNewTerminal}
+              title="New terminal"
+            />
+          </>
         }
       />
       <div ref={containerRef} className="flex-1 px-2 py-1 overflow-hidden bg-surface" />

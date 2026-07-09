@@ -41,8 +41,10 @@ export function ResizeHandle({ direction, onResize }: ResizeHandleProps) {
 
   return (
     <div
+      role="separator"
+      aria-orientation={direction === 'horizontal' ? 'vertical' : 'horizontal'}
       onMouseDown={onMouseDown}
-      className={`shrink-0 ${direction === 'horizontal' ? 'panel-resize-h' : 'panel-resize-v'}`}
+      className={direction === 'horizontal' ? 'panel-resize-h' : 'panel-resize-v'}
     />
   )
 }

@@ -1,3 +1,5 @@
+import { exec } from 'node:child_process'
+import { promisify } from 'node:util'
 import { app, BrowserWindow, ipcMain, dialog, Menu } from 'electron'
 import path from 'path'
 import fs from 'fs/promises'
@@ -7,6 +9,7 @@ import * as pty from 'node-pty'
 let mainWindow: BrowserWindow | null = null
 const terminals = new Map<number, pty.IPty>()
 let terminalCounter = 0
+const execAsync = promisify(exec)
 
 const isDev = !app.isPackaged
 
@@ -275,6 +278,43 @@ ipcMain.on('terminal:resize', (_e, id: number, cols: number, rows: number) => {
 ipcMain.on('terminal:kill', (_e, id: number) => {
   terminals.get(id)?.kill()
   terminals.delete(id)
+})
+
+ipcMain.handle('terminal:exec', async (_e, cwd: string, command: string) => {
+  const trimmed = command.trim()
+  if (!trimmed) {
+    return { success: false, stdout: '', stderr: 'Empty command', exitCode: 1 }
+  }
+
+  mainWindow?.webContents.send('terminal:inject', `\r\n\x1b[36m$\x1b[0m ${trimmed}\r\n`)
+
+  try {
+    const { stdout, stderr } = await execAsync(trimmed, {
+      cwd,
+      encoding: 'utf8',
+      maxBuffer: 10 * 1024 * 1024,
+      shell: process.platform === 'win32' ? 'powershell.exe' : process.env.SHELL || '/bin/bash',
+    })
+
+    const out = stdout || ''
+    const err = stderr || ''
+    if (out) mainWindow?.webContents.send('terminal:inject', out.replace(/\n/g, '\r\n'))
+    if (err) mainWindow?.webContents.send('terminal:inject', `\x1b[33m${err.replace(/\n/g, '\r\n')}\x1b[0m`)
+
+    return { success: true, stdout: out, stderr: err, exitCode: 0 }
+  } catch (err: unknown) {
+    const execErr = err as { stdout?: string; stderr?: string; code?: number; message?: string }
+    const stdout = execErr.stdout ?? ''
+    const stderr = execErr.stderr ?? execErr.message ?? String(err)
+    const exitCode = typeof execErr.code === 'number' ? execErr.code : 1
+
+    if (stdout) mainWindow?.webContents.send('terminal:inject', stdout.replace(/\n/g, '\r\n'))
+    if (stderr) {
+      mainWindow?.webContents.send('terminal:inject', `\x1b[31m${stderr.replace(/\n/g, '\r\n')}\x1b[0m`)
+    }
+
+    return { success: false, stdout, stderr, exitCode }
+  }
 })
 
 // ─── Settings persistence ──────────────────────────────────────

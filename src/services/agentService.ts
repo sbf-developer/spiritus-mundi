@@ -1,5 +1,6 @@
 import type { FileEntry } from '../vite-env.d'
 import { detectLanguage, useIDEStore } from '../store/ideStore'
+import { flattenTreeListing } from './contextService'
 
 export interface FileEdit {
   path: string
@@ -7,6 +8,15 @@ export interface FileEdit {
 }
 
 const FILE_TAG_RE = /<file\s+path=["']([^"']+)["']\s*>([\s\S]*?)<\/file>/gi
+const RUN_TAG_RE = /<run>([\s\S]*?)<\/run>/gi
+
+export interface CommandResult {
+  command: string
+  success: boolean
+  stdout: string
+  stderr: string
+  exitCode: number
+}
 
 export function parseAgentEdits(content: string): FileEdit[] {
   const edits: FileEdit[] = []
@@ -23,6 +33,22 @@ export function parseAgentEdits(content: string): FileEdit[] {
   return edits
 }
 
+export function parseAgentCommands(content: string): string[] {
+  const commands: string[] = []
+  let match: RegExpExecArray | null
+  const re = new RegExp(RUN_TAG_RE.source, RUN_TAG_RE.flags)
+
+  while ((match = re.exec(content)) !== null) {
+    const lines = match[1]
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean)
+    commands.push(...lines)
+  }
+
+  return commands
+}
+
 export function resolveProjectPath(rootPath: string, filePath: string): string {
   const normalized = filePath.replace(/\\/g, '/').replace(/^\.\/+/, '')
   if (/^[a-zA-Z]:/.test(normalized) || normalized.startsWith('/')) {
@@ -33,15 +59,7 @@ export function resolveProjectPath(rootPath: string, filePath: string): string {
 }
 
 function flattenTree(entries: FileEntry[], prefix = ''): string[] {
-  const lines: string[] = []
-  for (const e of entries) {
-    const rel = prefix ? `${prefix}/${e.name}` : e.name
-    lines.push(e.isDirectory ? `${rel}/` : rel)
-    if (e.children?.length) {
-      lines.push(...flattenTree(e.children, rel))
-    }
-  }
-  return lines
+  return flattenTreeListing(entries, prefix)
 }
 
 export function buildAgentSystemPrompt(
@@ -64,27 +82,41 @@ Project files:
 ${treeListing}
 ${activeSection}
 
+The user may attach @context blocks (terminal output, code selections, files, folders). Treat attached context as ground truth for debugging and edits.
+
 AGENT MODE RULES:
 1. To create or modify files, wrap FULL file content in tags exactly like this:
 <file path="relative/path/to/file.ext">
 full file content here
 </file>
-2. Use paths relative to the project root. You may edit multiple files in one response.
-3. Always write COMPLETE file contents (not diffs or snippets) inside each <file> tag.
-4. After file tags, add a brief summary of what you changed.
-5. If no folder is open, tell the user to open a folder first — do not invent paths.
-6. For runnable apps, create all needed files (HTML, CSS, JS, etc.) in the project.`
+2. To run shell commands (git, npm, etc.), wrap each command in <run> tags:
+<run>git init</run>
+<run>git add .</run>
+Commands run in the project root. One command per tag (or one per line inside a tag).
+3. Use paths relative to the project root. You may edit multiple files in one response.
+4. Always write COMPLETE file contents (not diffs or snippets) inside each <file> tag.
+5. After file tags and run tags, add a brief summary of what you changed or ran.
+6. Do NOT claim you ran commands unless you include <run> tags — the IDE executes those automatically.
+7. If no folder is open, tell the user to open a folder first — do not invent paths.
+8. For runnable apps, create all needed files (HTML, CSS, JS, etc.) in the project.`
 }
 
 export function buildChatSystemPrompt(
   activeFile: { path: string; content: string; language: string } | null,
-  rootPath: string | null
+  rootPath: string | null,
+  fileTree: FileEntry[] = []
 ): string {
+  const treeSection =
+    rootPath && fileTree.length
+      ? `\nProject files:\n${flattenTree(fileTree).slice(0, 60).join('\n')}`
+      : ''
+
   if (!activeFile) {
     return `You are a helpful coding assistant in Spiritus Mundi IDE.
 Answer questions clearly. Use markdown with fenced code blocks for code examples.
 Do NOT use <file> tags — chat mode is read-only and does not modify the project.
-${rootPath ? `Project is open at: ${rootPath}` : 'No project folder is open.'}`
+The user can attach @context: terminal output, code selections, files, folders, or codebase snippets. Use attached context carefully.
+${rootPath ? `Project is open at: ${rootPath}` : 'No project folder is open.'}${treeSection}`
   }
 
   const relativePath = rootPath
@@ -94,6 +126,7 @@ ${rootPath ? `Project is open at: ${rootPath}` : 'No project folder is open.'}`
   return `You are a helpful coding assistant in Spiritus Mundi IDE (CHAT mode — read only).
 Answer questions about the code. Use markdown with fenced code blocks.
 Do NOT use <file> tags. Suggest code in markdown blocks only.
+The user can attach @context: terminal output, code selections, files, folders, or codebase snippets.${treeSection}
 
 Open file: ${relativePath}
 \`\`\`${activeFile.language}
@@ -121,6 +154,24 @@ export async function applyAgentEdits(
   }
 
   return { applied, errors }
+}
+
+export async function applyAgentCommands(
+  rootPath: string,
+  commands: string[]
+): Promise<{ results: CommandResult[]; errors: string[] }> {
+  const results: CommandResult[] = []
+  const errors: string[] = []
+
+  for (const command of commands) {
+    const result = await window.spiritus.terminal.exec(rootPath, command)
+    results.push({ command, ...result })
+    if (!result.success) {
+      errors.push(`\`${command}\` exited with code ${result.exitCode}`)
+    }
+  }
+
+  return { results, errors }
 }
 
 export function openEditedFilesInEditor(rootPath: string, edits: FileEdit[]) {
@@ -153,4 +204,11 @@ export function openEditedFilesInEditor(rootPath: string, edits: FileEdit[]) {
 
 export function stripFileTags(content: string): string {
   return content.replace(FILE_TAG_RE, (_m, path: string) => `\n📄 \`${path}\` *(applied to project)*\n`)
+}
+
+export function stripRunTags(content: string): string {
+  return content.replace(RUN_TAG_RE, (_m, cmd: string) => {
+    const lines = cmd.trim().split('\n').map((l) => l.trim()).filter(Boolean)
+    return lines.map((line) => `\n\`$\` ${line} *(ran in terminal)*\n`).join('')
+  })
 }

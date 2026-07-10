@@ -4,7 +4,8 @@
  * Local form state until "Save settings" → ideStore + electron settings file.
  * "Test connection" hits aiService.testConnection without saving.
  */
-import { useState } from 'react'import { Check, AlertCircle, Loader2, Sun, Moon, Plug } from 'lucide-react'
+import { useState } from 'react'
+import { Check, AlertCircle, Loader2, Sun, Moon, Plug } from 'lucide-react'
 import { useIDEStore, defaultSettings, normalizeSettings } from '../store/ideStore'
 import { getProviderDefaults, testConnection } from '../services/aiService'
 import { useTheme } from '../hooks/useTheme'

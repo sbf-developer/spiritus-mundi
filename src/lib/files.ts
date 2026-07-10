@@ -10,7 +10,7 @@ export function isImageFile(name: string): boolean {
 
 export async function openFileAsTab(entry: { path: string; name: string }): Promise<OpenTab | null> {
   if (isImageFile(entry.name)) {
-    const result = await window.spiritus.readFileBase64(entry.path)
+    const result = await window.ontology.readFileBase64(entry.path)
     if (!result.success || !result.dataUrl) return null
     return {
       path: entry.path,
@@ -23,7 +23,7 @@ export async function openFileAsTab(entry: { path: string; name: string }): Prom
     }
   }
 
-  const result = await window.spiritus.readFile(entry.path)
+  const result = await window.ontology.readFile(entry.path)
   if (!result.success) return null
 
   return {

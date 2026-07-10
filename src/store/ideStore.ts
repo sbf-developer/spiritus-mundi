@@ -1,10 +1,10 @@
 import { create } from 'zustand'
 import type { FileEntry, AISettings, Theme } from './vite-env.d'
 import { applyTheme } from '../lib/theme'
-import type { ContextItem, EditorSelection } from '../services/contextService'
+import type { ContextItem, EditorSelection, RecentEdit } from '../services/contextService'
 import { createTerminalContext, createCodeContext } from '../services/contextService'
 
-export type { ContextItem, EditorSelection }
+export type { ContextItem, EditorSelection, RecentEdit }
 
 export interface OpenTab {
   path: string
@@ -22,9 +22,15 @@ export interface ChatMessage {
   content: string
   timestamp: number
   appliedFiles?: string[]
+  contextSnapshot?: ContextItem[]
 }
 
 export type ChatMode = 'chat' | 'agent'
+
+export interface PendingPlan {
+  userRequest: string
+  plan: string
+}
 
 interface IDEState {
   rootPath: string | null
@@ -43,9 +49,12 @@ interface IDEState {
   chatMessages: ChatMessage[]
   isStreaming: boolean
   chatMode: ChatMode
+  agentPlanMode: boolean
+  pendingPlan: PendingPlan | null
   chatContextItems: ContextItem[]
   terminalBuffer: string
   editorSelection: EditorSelection | null
+  recentEdits: RecentEdit[]
 
   setRootPath: (path: string | null) => void
   setFileTree: (tree: FileEntry[]) => void
@@ -71,6 +80,8 @@ interface IDEState {
   setIsStreaming: (v: boolean) => void
   clearChat: () => void
   setChatMode: (mode: ChatMode) => void
+  setAgentPlanMode: (v: boolean) => void
+  setPendingPlan: (plan: PendingPlan | null) => void
   setMessageAppliedFiles: (id: string, files: string[]) => void
   addContextItem: (item: ContextItem) => void
   removeContextItem: (id: string) => void
@@ -79,6 +90,7 @@ interface IDEState {
   setEditorSelection: (selection: EditorSelection | null) => void
   addTerminalToChat: () => void
   addSelectionToChat: () => void
+  recordRecentEdit: (path: string, source: 'user' | 'agent') => void
 }
 
 export const defaultSettings: AISettings = {
@@ -86,8 +98,15 @@ export const defaultSettings: AISettings = {
   apiKey: '',
   baseUrl: 'http://localhost:11434',
   model: 'llama3.2',
-  temperature: 0.7,
-  maxTokens: 4096,
+}
+
+export function normalizeSettings(raw: Partial<AISettings>): AISettings {
+  return {
+    provider: raw.provider ?? defaultSettings.provider,
+    apiKey: raw.apiKey ?? '',
+    baseUrl: raw.baseUrl ?? defaultSettings.baseUrl,
+    model: raw.model ?? defaultSettings.model,
+  }
 }
 
 function detectLanguage(filename: string): string {
@@ -122,11 +141,14 @@ export const useIDEStore = create<IDEState>((set, get) => ({
   chatMessages: [],
   isStreaming: false,
   chatMode: 'agent',
+  agentPlanMode: false,
+  pendingPlan: null,
   chatContextItems: [],
   terminalBuffer: '',
   editorSelection: null,
+  recentEdits: [],
 
-  setRootPath: (path) => set({ rootPath: path }),
+  setRootPath: (path) => set({ rootPath: path, recentEdits: [] }),
   setFileTree: (tree) => set({ fileTree: tree }),
 
   openTab: (tab) => {
@@ -159,12 +181,14 @@ export const useIDEStore = create<IDEState>((set, get) => ({
       ),
     }),
 
-  markTabSaved: (path) =>
+  markTabSaved: (path) => {
+    get().recordRecentEdit(path, 'user')
     set({
       tabs: get().tabs.map((t) =>
         t.path === path ? { ...t, isDirty: false } : t
       ),
-    }),
+    })
+  },
 
   setSidebarWidth: (w) => set({ sidebarWidth: Math.max(180, Math.min(480, w)) }),
   setChatWidth: (w) => set({ chatWidth: Math.max(280, Math.min(600, w)) }),
@@ -183,7 +207,7 @@ export const useIDEStore = create<IDEState>((set, get) => ({
     applyTheme(theme)
     set({ theme })
   },
-  setSettings: (s) => set({ settings: s }),
+  setSettings: (s) => set({ settings: normalizeSettings(s) }),
 
   addChatMessage: (msg) =>
     set({ chatMessages: [...get().chatMessages, msg] }),
@@ -200,6 +224,8 @@ export const useIDEStore = create<IDEState>((set, get) => ({
   setIsStreaming: (v) => set({ isStreaming: v }),
   clearChat: () => set({ chatMessages: [] }),
   setChatMode: (mode) => set({ chatMode: mode }),
+  setAgentPlanMode: (v) => set({ agentPlanMode: v }),
+  setPendingPlan: (plan) => set({ pendingPlan: plan }),
   setMessageAppliedFiles: (id, files) =>
     set({
       chatMessages: get().chatMessages.map((m) =>
@@ -247,5 +273,18 @@ export const useIDEStore = create<IDEState>((set, get) => ({
         rootPath
       )
     )
+  },
+
+  recordRecentEdit: (path, source) => {
+    const { rootPath } = get()
+    const rel = rootPath
+      ? path.replace(rootPath, '').replace(/^[/\\]/, '').replace(/\\/g, '/')
+      : path.split(/[/\\]/).pop() || path
+
+    set((s) => {
+      const filtered = s.recentEdits.filter((e) => e.path !== path)
+      const next: RecentEdit[] = [{ path, rel, timestamp: Date.now(), source }, ...filtered].slice(0, 12)
+      return { recentEdits: next }
+    })
   },
 }))

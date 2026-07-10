@@ -1,7 +1,7 @@
 {
-  "name": "spiritus-mundi",
+  "name": "ontology",
   "version": "1.0.0",
-  "description": "A minimalist local coding IDE with AI chat — bring your own model",
+  "description": "Ontology — a minimalist local coding IDE with AI agent harness",
   "main": "dist-electron/main.js",
   "author": "sbf-developer",
   "license": "MIT",
@@ -12,8 +12,8 @@
     "start": "vite"
   },
   "build": {
-    "appId": "com.spiritusmundi.ide",
-    "productName": "Spiritus Mundi",
+    "appId": "com.ontology.ide",
+    "productName": "Ontology",
     "directories": { "output": "release" },
     "files": ["dist/**/*", "dist-electron/**/*"],
     "win": { "target": "nsis" },

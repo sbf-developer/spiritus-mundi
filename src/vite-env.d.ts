@@ -1,10 +1,10 @@
 /// <reference types="vite/client" />
 
-import type { SpiritusAPI, AISettings, FileEntry, AppSettings, Theme } from '../electron/preload'
+import type { OntologyAPI, AISettings, FileEntry, AppSettings, Theme } from '../electron/preload'
 
 declare global {
   interface Window {
-    spiritus: SpiritusAPI
+    ontology: OntologyAPI
   }
 }
 

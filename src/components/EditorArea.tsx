@@ -37,7 +37,7 @@ export function EditorArea({ onOpenFolder }: EditorAreaProps) {
 
   const handleSave = useCallback(async () => {
     if (!activeTab || activeTab.viewMode === 'image') return
-    const result = await window.spiritus.writeFile(activeTab.path, activeTab.content)
+    const result = await window.ontology.writeFile(activeTab.path, activeTab.content)
     if (result.success) markTabSaved(activeTab.path)
   }, [activeTab, markTabSaved])
 

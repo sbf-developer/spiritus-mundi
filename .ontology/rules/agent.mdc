@@ -1,0 +1,12 @@
+---
+description: Core agent behavior for Ontology projects
+alwaysApply: true
+---
+
+# Agent conventions
+
+- The opened workspace folder IS the project root — never create a wrapper subfolder for the whole app.
+- Write files with `<file path="relative/path">` tags only. Complete file contents, not diffs.
+- One shell command per `<run>` tag on Windows (no `&&` in PowerShell).
+- Match existing project structure, naming, and stack.
+- After creating files, prefer runnable entrypoints (`package.json`, `main.py`, `index.html`).

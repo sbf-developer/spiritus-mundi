@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { Check, AlertCircle, Loader2, Sun, Moon } from 'lucide-react'
-import { useIDEStore, defaultSettings } from '../store/ideStore'
+import { Check, AlertCircle, Loader2, Sun, Moon, Plug } from 'lucide-react'
+import { useIDEStore, defaultSettings, normalizeSettings } from '../store/ideStore'
 import { getProviderDefaults, testConnection } from '../services/aiService'
 import { useTheme } from '../hooks/useTheme'
 import { PanelHeader } from './PanelHeader'
@@ -16,7 +16,7 @@ const PROVIDERS = [
 export function SettingsPanel() {
   const { settings, setSettings, theme } = useIDEStore()
   const { setTheme } = useTheme()
-  const [local, setLocal] = useState<AISettings>(settings)
+  const [local, setLocal] = useState<AISettings>(() => normalizeSettings(settings))
   const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null)
   const [testing, setTesting] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -39,8 +39,10 @@ export function SettingsPanel() {
   }
 
   const handleSave = async () => {
-    setSettings(local)
-    await window.spiritus.settings.save({ ai: local, theme })
+    const next = normalizeSettings(local)
+    setLocal(next)
+    setSettings(next)
+    await window.ontology.settings.save({ ai: next, theme })
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
   }
@@ -126,46 +128,36 @@ export function SettingsPanel() {
               className="input-field"
             />
           </Field>
-
-          <Field label={`Temperature · ${local.temperature}`}>
-            <input
-              type="range"
-              min="0"
-              max="2"
-              step="0.1"
-              value={local.temperature}
-              onChange={(e) => update({ temperature: parseFloat(e.target.value) })}
-              className="w-full"
-            />
-          </Field>
-
-          <Field label="Max tokens">
-            <input
-              type="number"
-              value={local.maxTokens}
-              onChange={(e) => update({ maxTokens: parseInt(e.target.value) || 4096 })}
-              className="input-field"
-            />
-          </Field>
         </section>
 
-        <div className="flex gap-2">
+        <section className="pt-3 border-t border-border-subtle space-y-2">
+          <p className="text-[10px] text-text-muted leading-relaxed">
+            Verify your provider responds, then save to use it in chat.
+          </p>
+
           <button
+            type="button"
             onClick={handleTest}
             disabled={testing}
-            className="btn-ghost flex-1 flex items-center justify-center gap-1.5 disabled:opacity-50"
+            className="w-full flex items-center justify-center gap-2 h-9 rounded-lg border border-border-default bg-surface-overlay text-[12px] font-medium text-text-secondary hover:bg-surface-hover hover:text-text-primary disabled:opacity-50 transition-colors"
           >
-            {testing && <Loader2 size={12} className="animate-spin" />}
-            Test
+            {testing ? (
+              <Loader2 size={13} className="animate-spin shrink-0" />
+            ) : (
+              <Plug size={13} strokeWidth={1.75} className="shrink-0 opacity-70" />
+            )}
+            {testing ? 'Checking connection…' : 'Test connection'}
           </button>
+
           <button
+            type="button"
             onClick={handleSave}
-            className="btn-soft flex-1 flex items-center justify-center gap-1.5"
+            className="w-full flex items-center justify-center gap-2 h-9 rounded-lg bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)] text-[12px] font-medium hover:opacity-90 active:scale-[0.99] transition-all"
           >
-            {saved && <Check size={12} strokeWidth={2} />}
-            {saved ? 'Saved' : 'Save'}
+            {saved ? <Check size={13} strokeWidth={2.25} /> : null}
+            {saved ? 'Saved' : 'Save settings'}
           </button>
-        </div>
+        </section>
 
         {testResult && (
           <div

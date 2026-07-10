@@ -4,7 +4,7 @@ export function applyTheme(theme: Theme) {
   const root = document.documentElement
   root.setAttribute('data-theme', theme)
   root.style.colorScheme = theme
-  window.spiritus?.window?.setTheme(theme)
+  window.ontology?.window?.setTheme(theme)
 }
 
 export function getMonacoTheme(theme: Theme) {

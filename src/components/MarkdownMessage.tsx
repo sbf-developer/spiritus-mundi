@@ -55,7 +55,7 @@ export function MarkdownMessage({ content, isUser, onApplyCode, showApply }: Mar
   const blocks = parseBlocks(content)
 
   return (
-    <div className={`space-y-1.5 ${isUser ? 'text-text-primary' : 'text-text-secondary'}`}>
+    <div className={`space-y-1.5 ${isUser ? 'text-text-primary' : 'text-text-primary/90'}`}>
       {blocks.map((block, i) =>
         block.type === 'code' ? (
           <CodeBox

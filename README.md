@@ -1,11 +1,12 @@
-# Spiritus Mundi
+# Ontology
 
-A minimalist, local coding IDE for software engineers. Clean file explorer, Monaco editor, integrated terminal, and AI chat — bring your own model.
+A minimalist, local coding IDE for software engineers. Clean file explorer, Monaco editor, integrated terminal, and AI agent — bring your own model.
 
-![Spiritus Mundi](https://img.shields.io/badge/Electron-IDE-6b8afd)
+![Ontology](https://img.shields.io/badge/Electron-IDE-6b8afd)
+
+![Ontology IDE — agent writing and running Python in your project](docs/screenshot.png)
 
 ## Features
-
 - **File Explorer** — Browse, open, create files and folders
 - **Code Editor** — Monaco editor with syntax highlighting, tabs, Ctrl+S save
 - **Terminal** — Integrated shell (PowerShell on Windows, bash on macOS/Linux)
@@ -35,7 +36,7 @@ npm run build
 
 1. Install [Ollama](https://ollama.ai)
 2. Pull a model: `ollama pull llama3.2`
-3. In Spiritus Mundi → Settings → select **Ollama**
+3. In Ontology → Settings → select **Ollama**
 4. Click **Test Connection** → **Save**
 
 ### DeepSeek

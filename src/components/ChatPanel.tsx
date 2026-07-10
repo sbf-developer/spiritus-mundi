@@ -1,20 +1,17 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { ArrowUp, Trash2, Copy, Check, FileCheck } from 'lucide-react'
 import { useIDEStore, detectLanguage } from '../store/ideStore'
 import { streamChat } from '../services/aiService'
-import {
-  buildAgentSystemPrompt,
-  buildChatSystemPrompt,
-  parseAgentCommands,
-  applyAgentCommands,
-  applyAgentFilesystem,
-} from '../services/agentService'
+import { assembleContextPrompt, gatherContextInputs, type AgentPhase } from '../services/contextOntology'
+import { compactMessagesForApi } from '../services/chatHistoryService'
+import { finishAgentTurn } from '../services/agentRunnerService'
 import { PanelHeader, IconButton } from './PanelHeader'
 import { MarkdownMessage } from './MarkdownMessage'
 import { AgentMessageRenderer } from './AgentMessageRenderer'
 import { ChatModeSelector } from './ChatModeSelector'
+import { PlanModeToggle, PendingPlanBar } from './PlanModeToggle'
 import { ChatContextBar, formatUserMessageWithContext } from './ChatContextBar'
-import { formatContextForPrompt, parsePastedCodeContext } from '../services/contextService'
+import { parsePastedCodeContext } from '../services/contextService'
 
 export function ChatPanel() {
   const {
@@ -31,11 +28,17 @@ export function ChatPanel() {
     rootPath,
     fileTree,
     chatMode,
+    agentPlanMode,
+    pendingPlan,
+    setPendingPlan,
     openTab,
     setFileTree,
     chatContextItems,
     addContextItem,
     clearContextItems,
+    terminalBuffer,
+    editorSelection,
+    recentEdits,
   } = useIDEStore()
 
   const [input, setInput] = useState('')
@@ -44,12 +47,121 @@ export function ChatPanel() {
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const assistantIdRef = useRef<string>('')
 
-  const activeTab = tabs.find((t) => t.path === activeTabPath)
-  const activeFile = activeTab?.viewMode !== 'image' ? activeTab : null
-
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [chatMessages])
+
+  const runStream = useCallback(
+    async (
+      userText: string,
+      displayText: string,
+      phase: AgentPhase,
+      options: { approvedPlan?: string; fixErrors?: string; skipApply?: boolean; contextSnapshot?: typeof chatContextItems } = {}
+    ) => {
+      const contextSnapshot = options.contextSnapshot ?? []
+
+      const userMsg = {
+        id: crypto.randomUUID(),
+        role: 'user' as const,
+        content: displayText,
+        timestamp: Date.now(),
+        contextSnapshot: contextSnapshot.length > 0 ? contextSnapshot : undefined,
+      }
+      addChatMessage(userMsg)
+
+      const assistantMsg = {
+        id: crypto.randomUUID(),
+        role: 'assistant' as const,
+        content: '',
+        timestamp: Date.now(),
+      }
+      assistantIdRef.current = assistantMsg.id
+      addChatMessage(assistantMsg)
+      setIsStreaming(true)
+
+      try {
+        const contextInput = await gatherContextInputs({
+          chatMode,
+          rootPath,
+          fileTree,
+          tabs,
+          activeTabPath,
+          terminalBuffer,
+          editorSelection,
+          recentEdits,
+          userQuery: userText,
+          attachedItems: contextSnapshot,
+          chatHistory: chatMessages,
+        })
+
+        const systemContext = assembleContextPrompt(contextInput, {
+          phase,
+          approvedPlan: options.approvedPlan,
+          fixErrors: options.fixErrors,
+        })
+
+        const apiMessages = compactMessagesForApi([...chatMessages, { ...userMsg, content: userText }])
+        let fullContent = ''
+
+        for await (const chunk of streamChat(settings, apiMessages, systemContext, chatMode)) {
+          fullContent += chunk
+          updateLastAssistantMessage(fullContent)
+        }
+
+        if (chatMode === 'agent' && rootPath) {
+          if (phase === 'plan') {
+            setPendingPlan({ userRequest: userText, plan: fullContent })
+            return fullContent
+          }
+
+          const turn = await finishAgentTurn(rootPath, fullContent, { skipApply: options.skipApply })
+          updateLastAssistantMessage(turn.fullContent)
+
+          if (turn.appliedFiles.length > 0) {
+            setMessageAppliedFiles(assistantIdRef.current, turn.appliedFiles)
+            const tree = await window.ontology.refreshTree(rootPath)
+            setFileTree(tree)
+          }
+
+          if (turn.verifyFailed && phase !== 'fix') {
+            const fixDisplay = `[Auto-fix after verification failure]\n\nOriginal task: ${userText}`
+            await runStream(userText, fixDisplay, 'fix', {
+              fixErrors: turn.verifyDetail,
+              contextSnapshot,
+            })
+          }
+
+          return turn.fullContent
+        }
+
+        return fullContent
+      } catch (err) {
+        updateLastAssistantMessage(`Error: ${err instanceof Error ? err.message : String(err)}`)
+        return null
+      } finally {
+        setIsStreaming(false)
+        inputRef.current?.focus()
+      }
+    },
+    [
+      chatMode,
+      rootPath,
+      fileTree,
+      tabs,
+      activeTabPath,
+      terminalBuffer,
+      editorSelection,
+      recentEdits,
+      chatMessages,
+      settings,
+      addChatMessage,
+      updateLastAssistantMessage,
+      setMessageAppliedFiles,
+      setFileTree,
+      setIsStreaming,
+      setPendingPlan,
+    ]
+  )
 
   const handleSend = async () => {
     const text = input.trim()
@@ -75,81 +187,28 @@ export function ChatPanel() {
     setInput('')
     const contextSnapshot = [...chatContextItems]
     const displayText = formatUserMessageWithContext(text, contextSnapshot)
-    const userMsg = {
-      id: crypto.randomUUID(),
-      role: 'user' as const,
-      content: displayText,
-      timestamp: Date.now(),
-    }
-    addChatMessage(userMsg)
     clearContextItems()
 
-    const assistantMsg = {
-      id: crypto.randomUUID(),
-      role: 'assistant' as const,
-      content: '',
-      timestamp: Date.now(),
-    }
-    assistantIdRef.current = assistantMsg.id
-    addChatMessage(assistantMsg)
-    setIsStreaming(true)
+    const phase: AgentPhase =
+      chatMode === 'agent' && agentPlanMode ? 'plan' : 'default'
 
-    try {
-      const fileCtx = activeFile
-        ? { path: activeFile.path, content: activeFile.content, language: activeFile.language }
-        : null
-
-      const contextBlock = formatContextForPrompt(contextSnapshot)
-      const baseSystem =
-        chatMode === 'agent'
-          ? buildAgentSystemPrompt(rootPath, fileTree, fileCtx)
-          : buildChatSystemPrompt(fileCtx, rootPath, fileTree)
-
-      const systemContext = contextBlock ? `${baseSystem}\n\n${contextBlock}` : baseSystem
-
-      const allMessages = [...chatMessages, { ...userMsg, content: text }]
-      let fullContent = ''
-
-      for await (const chunk of streamChat(settings, allMessages, systemContext)) {
-        fullContent += chunk
-        updateLastAssistantMessage(fullContent)
-      }
-
-      if (chatMode === 'agent' && rootPath) {
-        const { summaryParts, errors, appliedFiles } = await applyAgentFilesystem(rootPath, fullContent)
-
-        if (appliedFiles.length > 0) {
-          setMessageAppliedFiles(assistantIdRef.current, appliedFiles)
-        }
-
-        const commands = parseAgentCommands(fullContent)
-        if (commands.length > 0) {
-          useIDEStore.setState({ showTerminal: true })
-          await new Promise((r) => setTimeout(r, 200))
-          const { results, errors: cmdErrors } = await applyAgentCommands(rootPath, commands)
-          const ok = results.filter((r) => r.success).map((r) => r.command)
-          if (ok.length) {
-            summaryParts.push(
-              `✓ **Ran ${ok.length} command${ok.length > 1 ? 's' : ''}:** ${ok.map((c) => `\`${c}\``).join(', ')}`
-            )
-          }
-          errors.push(...cmdErrors)
-        }
-
-        if (summaryParts.length > 0 || errors.length > 0) {
-          const tree = await window.spiritus.refreshTree(rootPath)
-          setFileTree(tree)
-          const errLine = errors.length ? `\n⚠ ${errors.join('; ')}` : ''
-          updateLastAssistantMessage(fullContent + `\n\n---\n${summaryParts.join('\n')}${errLine}`)
-        }
-      }
-    } catch (err) {
-      updateLastAssistantMessage(`Error: ${err instanceof Error ? err.message : String(err)}`)
-    } finally {
-      setIsStreaming(false)
-      inputRef.current?.focus()
-    }
+    await runStream(text, displayText, phase, { contextSnapshot })
   }
+
+  const handleExecutePlan = useCallback(async () => {
+    if (!pendingPlan || isStreaming) return
+    const { userRequest, plan } = pendingPlan
+    setPendingPlan(null)
+
+    const displayText = `[Approved plan]\n\n${userRequest}`
+    await runStream(userRequest, displayText, 'execute', { approvedPlan: plan })
+  }, [pendingPlan, isStreaming, setPendingPlan, runStream])
+
+  useEffect(() => {
+    const onExecute = () => handleExecutePlan()
+    window.addEventListener('ontology:execute-plan', onExecute)
+    return () => window.removeEventListener('ontology:execute-plan', onExecute)
+  }, [handleExecutePlan])
 
   const handleApplyCode = async (code: string, language: string) => {
     if (!rootPath) return
@@ -159,9 +218,9 @@ export function ChatPanel() {
     const ext = extMap[language] || 'txt'
     const name = prompt('File name:', `untitled.${ext}`)
     if (!name) return
-    const result = await window.spiritus.createFile(rootPath, name)
+    const result = await window.ontology.createFile(rootPath, name)
     if (result.success && result.path) {
-      await window.spiritus.writeFile(result.path, code)
+      await window.ontology.writeFile(result.path, code)
       openTab({
         path: result.path,
         name,
@@ -170,7 +229,7 @@ export function ChatPanel() {
         language: detectLanguage(name),
         viewMode: 'code',
       })
-      const tree = await window.spiritus.refreshTree(rootPath)
+      const tree = await window.ontology.refreshTree(rootPath)
       setFileTree(tree)
     }
   }
@@ -201,7 +260,9 @@ export function ChatPanel() {
 
   const placeholder =
     chatMode === 'agent'
-      ? 'Build or edit something in your project...'
+      ? agentPlanMode
+        ? 'Describe what to build — agent will plan first...'
+        : 'Build or edit something in your project...'
       : 'Ask a question...'
 
   return (
@@ -212,7 +273,10 @@ export function ChatPanel() {
           chatMessages.length > 0 ? (
             <IconButton
               icon={<Trash2 size={13} strokeWidth={1.5} />}
-              onClick={clearChat}
+              onClick={() => {
+                clearChat()
+                setPendingPlan(null)
+              }}
               title="Clear"
             />
           ) : undefined
@@ -227,7 +291,9 @@ export function ChatPanel() {
             </p>
             <p className="text-[11px] text-text-muted">
               {chatMode === 'agent'
-                ? 'Try: "build a snake game and save it to index.html"'
+                ? agentPlanMode
+                  ? 'Plan mode — review before files are written'
+                  : 'Try: "build a snake game and save it to index.html"'
                 : `${settings.provider} · ${settings.model}`}
             </p>
           </div>
@@ -255,7 +321,7 @@ export function ChatPanel() {
               )}
             </div>
             {msg.content ? (
-              msg.role === 'assistant' && chatMode === 'agent' && !(isStreaming && msg.id === assistantIdRef.current) ? (
+              msg.role === 'assistant' && chatMode === 'agent' ? (
                 <AgentMessageRenderer
                   content={msg.content}
                   onApplyCode={handleApplyCode}
@@ -277,6 +343,8 @@ export function ChatPanel() {
         <div ref={messagesEndRef} />
       </div>
 
+      <PendingPlanBar />
+
       <div className="p-3 border-t border-border-subtle shrink-0">
         <div className="relative bg-surface-overlay border border-border-default rounded-xl focus-within:border-text-muted/40 transition-colors">
           <ChatContextBar input={input} setInput={setInput} inputRef={inputRef} userQuery={input} />
@@ -292,8 +360,9 @@ export function ChatPanel() {
             className="w-full bg-transparent px-3 pt-3 pb-10 text-[12px] leading-relaxed text-text-primary placeholder:text-text-muted resize-none focus:outline-none disabled:opacity-50"
           />
           <div className="absolute inset-x-2 bottom-2 flex items-center justify-between pointer-events-none">
-            <div className="pointer-events-auto">
+            <div className="pointer-events-auto flex items-center gap-0.5">
               <ChatModeSelector inline />
+              <PlanModeToggle />
             </div>
             <button
               type="button"

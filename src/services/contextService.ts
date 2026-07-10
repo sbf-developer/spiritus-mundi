@@ -1,7 +1,14 @@
 import type { FileEntry } from '../vite-env.d'
 import { detectLanguage } from '../store/ideStore'
 
-export type ContextItemType = 'terminal' | 'code' | 'file' | 'folder' | 'codebase'
+export type ContextItemType =
+  | 'terminal'
+  | 'code'
+  | 'file'
+  | 'folder'
+  | 'codebase'
+  | 'git'
+  | 'rules'
 
 export interface ContextItem {
   id: string
@@ -12,6 +19,13 @@ export interface ContextItem {
   startLine?: number
   endLine?: number
   language?: string
+}
+
+export interface RecentEdit {
+  path: string
+  rel: string
+  timestamp: number
+  source: 'user' | 'agent'
 }
 
 export interface EditorSelection {
@@ -37,6 +51,30 @@ export function stripAnsi(text: string): string {
 
 export function relPath(rootPath: string, fullPath: string): string {
   return fullPath.replace(rootPath, '').replace(/^[/\\]/, '').replace(/\\/g, '/')
+}
+
+export interface GrepHit {
+  path: string
+  rel: string
+  line: number
+  text: string
+}
+
+export function extractSearchTerms(query: string): string[] {
+  const stop = new Set([
+    'the', 'and', 'for', 'with', 'this', 'that', 'from', 'have', 'what', 'when', 'where', 'how',
+    'please', 'help', 'make', 'create', 'build', 'fix', 'add', 'update', 'change', 'file', 'code',
+  ])
+  return query
+    .toLowerCase()
+    .split(/\W+/)
+    .filter((w) => w.length > 2 && !stop.has(w))
+    .slice(0, 5)
+}
+
+export function pickGrepQuery(terms: string[]): string {
+  if (terms.length === 0) return ''
+  return terms.sort((a, b) => b.length - a.length)[0]
 }
 
 export function flattenFiles(entries: FileEntry[], prefix = ''): { path: string; rel: string; name: string }[] {
@@ -138,7 +176,7 @@ export async function createFolderContext(
     const fullPath = rootPath
       ? rootPath + (rootPath.includes('\\') ? '\\' : '/') + rel.replace(/\//g, rootPath.includes('\\') ? '\\' : '/')
       : rel
-    const result = await window.spiritus.readFile(fullPath)
+    const result = await window.ontology.readFile(fullPath)
     if (result.success) {
       const snippet = result.content.length > 3000 ? result.content.slice(0, 3000) + '\n...(truncated)' : result.content
       parts.push('', `--- ${rel} ---`, '```' + detectLanguage(rel), snippet, '```')
@@ -170,19 +208,47 @@ export async function searchCodebaseContext(
   fileTree: FileEntry[],
   query: string
 ): Promise<ContextItem | null> {
-  const keywords = query
+  const terms = query
     .toLowerCase()
     .split(/\W+/)
     .filter((w) => w.length > 2)
     .slice(0, 6)
 
-  if (keywords.length === 0) return null
+  if (terms.length === 0) return null
 
+  const grepQuery = terms.sort((a, b) => b.length - a.length)[0]
+  const grepResult = await window.ontology.grep(rootPath, grepQuery, 24)
+
+  if (grepResult.success && grepResult.matches.length > 0) {
+    const byFile = new Map<string, typeof grepResult.matches>()
+    for (const m of grepResult.matches) {
+      const list = byFile.get(m.rel) ?? []
+      list.push(m)
+      byFile.set(m.rel, list)
+    }
+
+    const parts: string[] = []
+    for (const [rel, hits] of [...byFile.entries()].slice(0, 8)) {
+      const lang = detectLanguage(rel)
+      const snippetLines = hits.map((h) => `${h.line}: ${h.text}`).join('\n')
+      parts.push(`### ${rel}\n\`\`\`${lang}\n${snippetLines}\n\`\`\``)
+    }
+
+    return {
+      id: crypto.randomUUID(),
+      type: 'codebase',
+      label: 'Codebase',
+      content: parts.join('\n\n'),
+    }
+  }
+
+  // Fallback: keyword scan when grep finds nothing (e.g. multi-word concepts)
+  const keywords = terms
   const candidates = flattenFiles(fileTree).filter((f) => isTextFile(f.name)).slice(0, 120)
   const scored: { rel: string; path: string; score: number; snippet: string; language: string }[] = []
 
   for (const file of candidates) {
-    const result = await window.spiritus.readFile(file.path)
+    const result = await window.ontology.readFile(file.path)
     if (!result.success) continue
 
     const lower = result.content.toLowerCase()
@@ -215,10 +281,7 @@ export async function searchCodebaseContext(
   if (top.length === 0) return null
 
   const content = top
-    .map(
-      (hit) =>
-        `### ${hit.rel}\n\`\`\`${hit.language}\n${hit.snippet.trim()}\n\`\`\``
-    )
+    .map((hit) => `### ${hit.rel}\n\`\`\`${hit.language}\n${hit.snippet.trim()}\n\`\`\``)
     .join('\n\n')
 
   return {
@@ -227,6 +290,37 @@ export async function searchCodebaseContext(
     label: 'Codebase',
     content,
   }
+}
+
+export async function loadAutoSnippets(
+  rootPath: string,
+  grepHits: { rel: string; path: string }[],
+  maxFiles = 4,
+  maxChars = 2500
+): Promise<{ rel: string; language: string; content: string }[]> {
+  const seen = new Set<string>()
+  const snippets: { rel: string; language: string; content: string }[] = []
+
+  for (const hit of grepHits) {
+    if (seen.has(hit.rel) || snippets.length >= maxFiles) break
+    seen.add(hit.rel)
+
+    const result = await window.ontology.readFile(hit.path)
+    if (!result.success) continue
+
+    const content =
+      result.content.length > maxChars
+        ? result.content.slice(0, maxChars) + '\n...(truncated)'
+        : result.content
+
+    snippets.push({
+      rel: hit.rel,
+      language: detectLanguage(hit.rel),
+      content,
+    })
+  }
+
+  return snippets
 }
 
 export function formatContextForPrompt(items: ContextItem[]): string {
@@ -244,6 +338,10 @@ export function formatContextForPrompt(items: ContextItem[]): string {
         return `## Folder: ${item.label}\n${item.content}`
       case 'codebase':
         return `## Relevant codebase snippets\n${item.content}`
+      case 'git':
+        return `## Git context\n${item.content}`
+      case 'rules':
+        return `## Project rules\n${item.content}`
       default:
         return item.content
     }
@@ -308,6 +406,19 @@ export function buildContextPickerOptions(
       type: 'selection',
       label: 'Selection',
       detail: `${selection.name}:${selection.startLine}-${selection.endLine}`,
+    })
+  }
+
+  if (!q || 'git'.includes(q)) {
+    options.push({ id: 'git', type: 'git' as ContextItemType, label: 'Git', detail: 'Branch, status, and diff' })
+  }
+
+  if (!q || 'rules'.includes(q) || 'agents'.includes(q)) {
+    options.push({
+      id: 'rules',
+      type: 'rules' as ContextItemType,
+      label: 'Rules',
+      detail: '.ontology/rules, AGENTS.md, .ontologyrules',
     })
   }
 

@@ -1,15 +1,17 @@
-import { exec } from 'node:child_process'
+import { exec, execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { app, BrowserWindow, ipcMain, dialog, Menu } from 'electron'
 import path from 'path'
 import fs from 'fs/promises'
 import fsSync from 'fs'
 import * as pty from 'node-pty'
+import { loadProjectHarness, validateCommand, validateDeletePath } from './harnessLoader'
 
 let mainWindow: BrowserWindow | null = null
 const terminals = new Map<number, pty.IPty>()
 let terminalCounter = 0
 const execAsync = promisify(exec)
+const execFileAsync = promisify(execFile)
 
 const isDev = !app.isPackaged
 
@@ -179,6 +181,18 @@ ipcMain.handle('fs:readFileBase64', async (_e, filePath: string) => {
 
 ipcMain.handle('fs:writeFile', async (_e, filePath: string, content: string) => {
   try {
+    try {
+      const stat = await fs.stat(filePath)
+      if (stat.isDirectory()) {
+        const entries = await fs.readdir(filePath)
+        if (entries.length > 0) {
+          return { success: false, error: `EISDIR: ${filePath} is a non-empty directory` }
+        }
+        await fs.rmdir(filePath)
+      }
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err
+    }
     await fs.mkdir(path.dirname(filePath), { recursive: true })
     await fs.writeFile(filePath, content, 'utf-8')
     return { success: true }
@@ -207,7 +221,13 @@ ipcMain.handle('fs:createFolder', async (_e, dirPath: string, folderName: string
   }
 })
 
-ipcMain.handle('fs:delete', async (_e, targetPath: string) => {
+ipcMain.handle('fs:delete', async (_e, targetPath: string, rootPath?: string) => {
+  if (rootPath) {
+    const check = validateDeletePath(rootPath, targetPath)
+    if (!check.allowed) {
+      return { success: false, error: check.reason ?? 'Delete blocked by harness' }
+    }
+  }
   try {
     const stat = await fs.stat(targetPath)
     if (stat.isDirectory()) {
@@ -252,6 +272,167 @@ ipcMain.handle('fs:watch', async (_e, rootPath: string) => {
     mainWindow?.webContents.send('fs:changed', tree)
   })
   return () => watcher.close()
+})
+
+// ─── Search & Git context ─────────────────────────────────────
+
+const SEARCH_SKIP_DIRS = new Set([
+  'node_modules', '.git', 'dist', 'dist-electron', 'build', '.next', 'coverage', 'release', '.cache',
+])
+
+const TEXT_SEARCH_EXTENSIONS = new Set([
+  'ts', 'tsx', 'js', 'jsx', 'py', 'rs', 'go', 'java', 'cpp', 'c', 'cs', 'rb', 'php',
+  'html', 'css', 'scss', 'json', 'md', 'yaml', 'yml', 'xml', 'sql', 'sh', 'bash', 'ps1', 'toml',
+  'vue', 'svelte', 'txt', 'env', 'gitignore', 'dockerfile',
+])
+
+interface GrepMatch {
+  path: string
+  rel: string
+  line: number
+  text: string
+}
+
+async function grepWithRipgrep(rootPath: string, query: string, maxResults: number): Promise<GrepMatch[] | null> {
+  try {
+    const { stdout } = await execFileAsync(
+      'rg',
+      ['--json', '--max-count', '3', '--max-filesize', '512K', '-i', query, rootPath],
+      { maxBuffer: 8 * 1024 * 1024, timeout: 8000 }
+    )
+    const matches: GrepMatch[] = []
+    for (const line of stdout.split('\n')) {
+      if (!line.trim()) continue
+      try {
+        const row = JSON.parse(line)
+        if (row.type !== 'match') continue
+        const filePath = row.data.path.text as string
+        const rel = path.relative(rootPath, filePath).replace(/\\/g, '/')
+        if (SEARCH_SKIP_DIRS.has(rel.split('/')[0])) continue
+        matches.push({
+          path: filePath,
+          rel,
+          line: row.data.line_number as number,
+          text: (row.data.lines.text as string).trimEnd(),
+        })
+        if (matches.length >= maxResults) break
+      } catch {
+        // skip malformed rg json line
+      }
+    }
+    return matches
+  } catch {
+    return null
+  }
+}
+
+async function grepFallback(rootPath: string, query: string, maxResults: number): Promise<GrepMatch[]> {
+  const q = query.toLowerCase()
+  const matches: GrepMatch[] = []
+
+  async function walk(dir: string, depth = 0): Promise<void> {
+    if (depth > 8 || matches.length >= maxResults) return
+    let entries: Awaited<ReturnType<typeof fs.readdir>>
+    try {
+      entries = await fs.readdir(dir, { withFileTypes: true })
+    } catch {
+      return
+    }
+
+    for (const entry of entries) {
+      if (matches.length >= maxResults) return
+      if (entry.name.startsWith('.') && entry.name !== '.env') continue
+      const fullPath = path.join(dir, entry.name)
+      if (entry.isDirectory()) {
+        if (SEARCH_SKIP_DIRS.has(entry.name)) continue
+        await walk(fullPath, depth + 1)
+        continue
+      }
+
+      const ext = path.extname(entry.name).slice(1).toLowerCase()
+      if (!TEXT_SEARCH_EXTENSIONS.has(ext) && entry.name !== 'Dockerfile') continue
+
+      try {
+        const stat = await fs.stat(fullPath)
+        if (stat.size > 512 * 1024) continue
+        const content = await fs.readFile(fullPath, 'utf-8')
+        const lines = content.split('\n')
+        for (let i = 0; i < lines.length; i++) {
+          if (lines[i].toLowerCase().includes(q)) {
+            matches.push({
+              path: fullPath,
+              rel: path.relative(rootPath, fullPath).replace(/\\/g, '/'),
+              line: i + 1,
+              text: lines[i].trimEnd(),
+            })
+            if (matches.length >= maxResults) return
+          }
+        }
+      } catch {
+        // skip unreadable files
+      }
+    }
+  }
+
+  await walk(rootPath)
+  return matches
+}
+
+ipcMain.handle('fs:grep', async (_e, rootPath: string, query: string, maxResults = 20) => {
+  const trimmed = query.trim()
+  if (!trimmed || !fsSync.existsSync(rootPath)) {
+    return { success: true, matches: [] as GrepMatch[] }
+  }
+
+  const rg = await grepWithRipgrep(rootPath, trimmed, maxResults)
+  const matches = rg ?? (await grepFallback(rootPath, trimmed, maxResults))
+  return { success: true, matches }
+})
+
+async function runGit(cwd: string, args: string[]): Promise<string | null> {
+  try {
+    const { stdout } = await execFileAsync('git', args, { cwd, maxBuffer: 2 * 1024 * 1024, timeout: 5000 })
+    return stdout.trim()
+  } catch {
+    return null
+  }
+}
+
+ipcMain.handle('git:context', async (_e, rootPath: string) => {
+  if (!fsSync.existsSync(path.join(rootPath, '.git'))) {
+    return { success: true, isRepo: false as const }
+  }
+
+  const branch = await runGit(rootPath, ['branch', '--show-current'])
+  const status = await runGit(rootPath, ['status', '--short', '--branch'])
+  const diffStat = await runGit(rootPath, ['diff', '--stat', 'HEAD'])
+  const diff = await runGit(rootPath, ['diff', 'HEAD'])
+  const untracked = await runGit(rootPath, ['ls-files', '--others', '--exclude-standard'])
+
+  const diffTrimmed = diff && diff.length > 6000 ? diff.slice(0, 6000) + '\n...(diff truncated)' : diff
+
+  return {
+    success: true,
+    isRepo: true as const,
+    branch: branch || 'HEAD detached',
+    status: status || '',
+    diffStat: diffStat || '',
+    diff: diffTrimmed || '',
+    untracked: untracked ? untracked.split('\n').filter(Boolean).slice(0, 30) : [],
+  }
+})
+
+ipcMain.handle('fs:readRules', async (_e, rootPath: string) => {
+  const bundle = await loadProjectHarness(rootPath)
+  return {
+    success: true,
+    rules: bundle.rules.map((r) => ({ name: r.name, content: r.content })),
+  }
+})
+
+ipcMain.handle('harness:load', async (_e, rootPath: string, activeRel?: string) => {
+  const bundle = await loadProjectHarness(rootPath, activeRel)
+  return { success: true, ...bundle }
 })
 
 // ─── Terminal ──────────────────────────────────────────────────
@@ -305,14 +486,26 @@ ipcMain.handle('terminal:exec', async (_e, cwd: string, command: string) => {
     return { success: false, stdout: '', stderr: 'Empty command', exitCode: 1 }
   }
 
+  const safety = validateCommand(trimmed)
+  if (!safety.allowed) {
+    const msg = `Blocked by harness: ${safety.reason}`
+    mainWindow?.webContents.send('terminal:inject', `\r\n\x1b[31m${msg}\x1b[0m\r\n`)
+    return { success: false, stdout: '', stderr: msg, exitCode: 1 }
+  }
+
   mainWindow?.webContents.send('terminal:inject', `\r\n\x1b[36m$\x1b[0m ${trimmed}\r\n`)
 
   try {
+    const useCmd = trimmed.startsWith('cmd.exe /c ')
     const { stdout, stderr } = await execAsync(trimmed, {
       cwd,
       encoding: 'utf8',
       maxBuffer: 10 * 1024 * 1024,
-      shell: process.platform === 'win32' ? 'powershell.exe' : process.env.SHELL || '/bin/bash',
+      shell: useCmd
+        ? undefined
+        : process.platform === 'win32'
+          ? 'powershell.exe'
+          : process.env.SHELL || '/bin/bash',
     })
 
     const out = stdout || ''

@@ -12,8 +12,6 @@ export interface AISettings {
   apiKey: string
   baseUrl: string
   model: string
-  temperature: number
-  maxTokens: number
 }
 
 export type Theme = 'dark' | 'light'
@@ -34,12 +32,52 @@ const api = {
   writeFile: (path: string, content: string) => ipcRenderer.invoke('fs:writeFile', path, content),
   createFile: (dir: string, name: string) => ipcRenderer.invoke('fs:createFile', dir, name),
   createFolder: (dir: string, name: string) => ipcRenderer.invoke('fs:createFolder', dir, name),
-  deletePath: (path: string) => ipcRenderer.invoke('fs:delete', path),
+  readRules: (root: string) =>
+    ipcRenderer.invoke('fs:readRules', root) as Promise<{
+      success: boolean
+      rules: { name: string; content: string }[]
+    }>,
+
+  loadHarness: (root: string, activeRel?: string) =>
+    ipcRenderer.invoke('harness:load', root, activeRel) as Promise<{
+      success: boolean
+      rules: {
+        id: string
+        name: string
+        content: string
+        alwaysApply: boolean
+        globs: string[]
+        description: string
+      }[]
+      skills: { id: string; name: string; description: string; content: string }[]
+    }>,
+
+  deletePath: (path: string, rootPath?: string) => ipcRenderer.invoke('fs:delete', path, rootPath),
   renamePath: (oldPath: string, newPath: string) =>
     ipcRenderer.invoke('fs:rename', oldPath, newPath) as Promise<{ success: boolean; path?: string; error?: string }>,
   mkdirPath: (dirPath: string) =>
     ipcRenderer.invoke('fs:mkdir', dirPath) as Promise<{ success: boolean; path?: string; error?: string }>,
   refreshTree: (root: string) => ipcRenderer.invoke('fs:refreshTree', root),
+
+  grep: (root: string, query: string, maxResults?: number) =>
+    ipcRenderer.invoke('fs:grep', root, query, maxResults) as Promise<{
+      success: boolean
+      matches: { path: string; rel: string; line: number; text: string }[]
+    }>,
+
+  gitContext: (root: string) =>
+    ipcRenderer.invoke('git:context', root) as Promise<
+      | { success: boolean; isRepo: false }
+      | {
+          success: boolean
+          isRepo: true
+          branch: string
+          status: string
+          diffStat: string
+          diff: string
+          untracked: string[]
+        }
+    >,
 
   onFsChanged: (cb: (tree: FileEntry[]) => void) => {
     const handler = (_: unknown, tree: FileEntry[]) => cb(tree)
@@ -95,6 +133,6 @@ const api = {
   },
 }
 
-contextBridge.exposeInMainWorld('spiritus', api)
+contextBridge.exposeInMainWorld('ontology', api)
 
-export type SpiritusAPI = typeof api
+export type OntologyAPI = typeof api

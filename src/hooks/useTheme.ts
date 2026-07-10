@@ -20,15 +20,15 @@ export function useTheme() {
 }
 
 async function persistTheme(theme: Theme) {
-  const saved = await window.spiritus.settings.get()
-  await window.spiritus.settings.save({
+  const saved = await window.ontology.settings.get()
+  await window.ontology.settings.save({
     ai: saved?.ai ?? useIDEStore.getState().settings,
     theme,
   })
 }
 
 export function loadSavedTheme() {
-  window.spiritus.settings.get().then((saved) => {
+  window.ontology.settings.get().then((saved) => {
     if (saved?.ai) useIDEStore.getState().setSettings(saved.ai)
     if (saved?.theme) useIDEStore.getState().setTheme(saved.theme)
   })

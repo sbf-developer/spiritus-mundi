@@ -1,0 +1,12 @@
+---
+description: TypeScript and React patterns for this IDE codebase
+globs: **/*.{ts,tsx}
+alwaysApply: false
+---
+
+# TypeScript / React
+
+- Functional components with explicit props interfaces.
+- Zustand for global state; keep components thin.
+- Match existing Tailwind utility patterns and CSS variables in `src/index.css`.
+- Prefer minimal diffs; reuse existing services (`contextOntology`, `agentService`, `harnessService`).

@@ -20,12 +20,23 @@ export function AgentMessageRenderer({ content, onApplyCode, showApply }: AgentM
   }
 
   return (
-    <div className="space-y-2 text-text-secondary">
+    <div className="space-y-2.5 agent-message">
       {blocks.map((block, i) => {
         switch (block.type) {
           case 'file': {
             const name = block.path.split(/[/\\]/).pop() || block.path
             const lang = detectLanguage(name)
+            return (
+              <CodeBox
+                key={i}
+                meta={{ language: lang, filename: block.path, code: block.content }}
+                defaultCollapsed
+                variant="agent"
+              />
+            )
+          }
+          case 'code': {
+            const lang = block.path ? detectLanguage(block.path) : block.language
             return (
               <CodeBox
                 key={i}
@@ -77,11 +88,21 @@ export function AgentMessageRenderer({ content, onApplyCode, showApply }: AgentM
           case 'summary':
             return (
               <div key={i} className="agent-summary">
-                {block.content.split('\n').map((line, j) => (
-                  <div key={j} className="agent-summary-line">
-                    {line.replace(/^✓\s*\*\*/, '').replace(/\*\*/g, '').replace(/^⚠\s*/, 'Warning: ')}
-                  </div>
-                ))}
+                {block.content.split('\n').map((line, j) => {
+                  const isError = line.startsWith('⚠')
+                  const cleaned = line
+                    .replace(/^✓\s*\*\*/, '')
+                    .replace(/\*\*/g, '')
+                    .replace(/^⚠\s*/, '')
+                  return (
+                    <div
+                      key={j}
+                      className={`agent-summary-line ${isError ? 'agent-summary-line-error' : ''}`}
+                    >
+                      {isError ? `⚠ ${cleaned}` : cleaned}
+                    </div>
+                  )
+                })}
               </div>
             )
           case 'text':

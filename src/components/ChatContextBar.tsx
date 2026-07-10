@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { Terminal, FileCode, FolderOpen, Search, X, Braces } from 'lucide-react'
+import { Terminal, FileCode, FolderOpen, Search, X, Braces, GitBranch, ScrollText } from 'lucide-react'
 import { useIDEStore } from '../store/ideStore'
 import {
   buildContextPickerOptions,
@@ -10,6 +10,7 @@ import {
   createCodeContext,
   type ContextItem,
 } from '../services/contextService'
+import { createGitContextItem, createRulesContextItem } from '../services/contextOntology'
 
 interface ChatContextBarProps {
   input: string
@@ -25,6 +26,8 @@ const TYPE_ICONS = {
   folder: FolderOpen,
   codebase: Search,
   selection: Braces,
+  git: GitBranch,
+  rules: ScrollText,
 }
 
 export function ChatContextBar({ input, setInput, inputRef, userQuery }: ChatContextBarProps) {
@@ -126,8 +129,20 @@ export function ChatContextBar({ input, setInput, inputRef, userQuery }: ChatCon
       return
     }
 
+    if (type === 'git' && rootPath) {
+      const item = await createGitContextItem(rootPath)
+      if (item) addContextItem(item)
+      return
+    }
+
+    if (type === 'rules' && rootPath) {
+      const item = await createRulesContextItem(rootPath)
+      if (item) addContextItem(item)
+      return
+    }
+
     if (type === 'file') {
-      const result = await window.spiritus.readFile(optionId)
+      const result = await window.ontology.readFile(optionId)
       if (result.success) {
         const name = optionId.split(/[/\\]/).pop() || optionId
         addContextItem(createFileContext(optionId, name, result.content, rootPath))

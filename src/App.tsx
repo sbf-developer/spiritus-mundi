@@ -37,7 +37,7 @@ export default function App() {
   }, [])
 
   const handleOpenFolder = useCallback(async () => {
-    const result = await window.spiritus.openFolder()
+    const result = await window.ontology.openFolder()
     if (result) {
       setRootPath(result.path)
       setFileTree(result.tree)
@@ -45,7 +45,7 @@ export default function App() {
   }, [setRootPath, setFileTree])
 
   useEffect(() => {
-    const unsub = window.spiritus.onMenuOpenFolder(() => handleOpenFolder())
+    const unsub = window.ontology.onMenuOpenFolder(() => handleOpenFolder())
     return unsub
   }, [handleOpenFolder])
 
@@ -62,7 +62,7 @@ export default function App() {
 
   useEffect(() => {
     if (!rootPath) return
-    const unsub = window.spiritus.onFsChanged((tree) => setFileTree(tree))
+    const unsub = window.ontology.onFsChanged((tree) => setFileTree(tree))
     return unsub
   }, [rootPath, setFileTree])
 

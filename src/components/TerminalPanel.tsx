@@ -21,7 +21,7 @@ export function TerminalPanel() {
   const spawnTerminal = async () => {
     if (!containerRef.current) return
 
-    const id = await window.spiritus.terminal.create(rootPath || undefined)
+    const id = await window.ontology.terminal.create(rootPath || undefined)
 
     const xterm = new XTerm({
       theme: getTerminalTheme(theme),
@@ -40,7 +40,7 @@ export function TerminalPanel() {
     fitAddon.fit()
 
     xterm.onData((data) => {
-      window.spiritus.terminal.input(id, data)
+      window.ontology.terminal.input(id, data)
     })
 
     const instance: TermInstance = { id, xterm, fitAddon }
@@ -50,7 +50,7 @@ export function TerminalPanel() {
       fitAddon.fit()
       const dims = fitAddon.proposeDimensions()
       if (dims) {
-        window.spiritus.terminal.resize(id, dims.cols, dims.rows)
+        window.ontology.terminal.resize(id, dims.cols, dims.rows)
       }
     })
     ro.observe(containerRef.current)
@@ -61,16 +61,16 @@ export function TerminalPanel() {
   useEffect(() => {
     spawnTerminal()
 
-    const unsubData = window.spiritus.terminal.onData((id, data) => {
+    const unsubData = window.ontology.terminal.onData((id, data) => {
       termsRef.current.find((t) => t.id === id)?.xterm.write(data)
       useIDEStore.getState().appendTerminalOutput(data)
     })
 
-    const unsubExit = window.spiritus.terminal.onExit((id) => {
+    const unsubExit = window.ontology.terminal.onExit((id) => {
       termsRef.current.find((t) => t.id === id)?.xterm.write('\r\n\x1b[90m[Process exited]\x1b[0m\r\n')
     })
 
-    const unsubInject = window.spiritus.terminal.onInject((text) => {
+    const unsubInject = window.ontology.terminal.onInject((text) => {
       termsRef.current[0]?.xterm.write(text)
       useIDEStore.getState().appendTerminalOutput(text)
     })
@@ -80,7 +80,7 @@ export function TerminalPanel() {
       unsubExit()
       unsubInject()
       termsRef.current.forEach((t) => {
-        window.spiritus.terminal.kill(t.id)
+        window.ontology.terminal.kill(t.id)
         t.xterm.dispose()
       })
       termsRef.current = []
@@ -96,7 +96,7 @@ export function TerminalPanel() {
 
   const handleNewTerminal = () => {
     termsRef.current.forEach((t) => {
-      window.spiritus.terminal.kill(t.id)
+      window.ontology.terminal.kill(t.id)
       t.xterm.dispose()
     })
     spawnTerminal()

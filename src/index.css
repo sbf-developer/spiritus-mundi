@@ -36,8 +36,8 @@ html[data-theme='light'] {
   --border-default: rgba(0, 0, 0, 0.1);
   --border-subtle: rgba(0, 0, 0, 0.06);
   --text-primary: #1a1a1a;
-  --text-secondary: #666666;
-  --text-muted: #999999;
+  --text-secondary: #555555;
+  --text-muted: #777777;
   --accent: #1a1a1a;
   --accent-muted: #666666;
   --accent-glow: rgba(0, 0, 0, 0.04);
@@ -618,6 +618,19 @@ html[data-theme='light'] .action-card-stat-del {
 
 .agent-summary-line {
   font-size: 11px;
-  line-height: 1.5;
-  color: var(--text-muted);
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
+.agent-summary-line-error {
+  color: #c0392b;
+}
+
+html[data-theme='light'] .agent-summary-line-error {
+  color: #b91c1c;
+}
+
+.agent-message .text-\[12px\] {
+  color: var(--text-primary);
+  opacity: 0.92;
 }

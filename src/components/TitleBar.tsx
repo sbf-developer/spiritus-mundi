@@ -9,7 +9,7 @@ interface TitleBarProps {
   onToggleChat: () => void
 }
 
-const isMac = window.spiritus.platform === 'darwin'
+const isMac = window.ontology.platform === 'darwin'
 
 export function TitleBar({
   onOpenFolder,
@@ -32,7 +32,7 @@ export function TitleBar({
         {!isMac && (
           <>
             <span className="text-[12px] font-medium text-text-primary tracking-tight truncate">
-              Spiritus Mundi
+              Ontology
             </span>
             <span className="text-border-default">·</span>
           </>
@@ -70,9 +70,9 @@ export function TitleBar({
         </button>
         {!isMac && (
           <>
-            <WindowButton icon={<Minus size={13} strokeWidth={1.5} />} onClick={() => window.spiritus.window.minimize()} />
-            <WindowButton icon={<Square size={11} strokeWidth={1.5} />} onClick={() => window.spiritus.window.maximize()} />
-            <WindowButton icon={<X size={13} strokeWidth={1.5} />} onClick={() => window.spiritus.window.close()} danger />
+            <WindowButton icon={<Minus size={13} strokeWidth={1.5} />} onClick={() => window.ontology.window.minimize()} />
+            <WindowButton icon={<Square size={11} strokeWidth={1.5} />} onClick={() => window.ontology.window.maximize()} />
+            <WindowButton icon={<X size={13} strokeWidth={1.5} />} onClick={() => window.ontology.window.close()} danger />
           </>
         )}
       </div>

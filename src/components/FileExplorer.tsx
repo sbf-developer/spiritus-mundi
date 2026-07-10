@@ -47,7 +47,7 @@ export function FileExplorer({ onOpenFolder }: FileExplorerProps) {
 
   const handleRefresh = useCallback(async () => {
     if (!rootPath) return
-    const tree = await window.spiritus.refreshTree(rootPath)
+    const tree = await window.ontology.refreshTree(rootPath)
     setFileTree(tree)
   }, [rootPath, setFileTree])
 
@@ -78,8 +78,8 @@ export function FileExplorer({ onOpenFolder }: FileExplorerProps) {
 
     const result =
       type === 'file'
-        ? await window.spiritus.createFile(dirPath, name)
-        : await window.spiritus.createFolder(dirPath, name)
+        ? await window.ontology.createFile(dirPath, name)
+        : await window.ontology.createFolder(dirPath, name)
 
     if (!result.success) return
 

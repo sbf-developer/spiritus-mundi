@@ -1,5 +1,11 @@
 import type { AISettings } from '../vite-env.d'
-import type { ChatMessage } from '../store/ideStore'
+import type { ChatMessage, ChatMode } from '../store/ideStore'
+
+/** Cursor-style: fixed per mode, not exposed in settings. */
+const GENERATION_PARAMS: Record<ChatMode, { temperature: number; maxTokens: number }> = {
+  agent: { temperature: 0.2, maxTokens: 8192 },
+  chat: { temperature: 0.7, maxTokens: 4096 },
+}
 
 const PROVIDER_DEFAULTS: Record<AISettings['provider'], { baseUrl: string; model: string }> = {
   ollama: { baseUrl: 'http://localhost:11434', model: 'llama3.2' },
@@ -33,8 +39,10 @@ function getChatEndpoint(settings: AISettings): string {
 function buildBody(
   settings: AISettings,
   messages: ChatMessage[],
+  chatMode: ChatMode,
   systemContext?: string
 ): unknown {
+  const { temperature, maxTokens } = GENERATION_PARAMS[chatMode]
   const msgs = messages
     .filter((m) => m.role !== 'system')
     .map((m) => ({ role: m.role, content: m.content }))
@@ -49,8 +57,8 @@ function buildBody(
       messages: msgs,
       stream: true,
       options: {
-        temperature: settings.temperature,
-        num_predict: settings.maxTokens,
+        temperature,
+        num_predict: maxTokens,
       },
     }
   }
@@ -59,8 +67,8 @@ function buildBody(
     model: settings.model,
     messages: msgs,
     stream: true,
-    temperature: settings.temperature,
-    max_tokens: settings.maxTokens,
+    temperature,
+    max_tokens: maxTokens,
   }
 }
 
@@ -123,10 +131,11 @@ async function* parseOllamaStream(reader: ReadableStreamDefaultReader<Uint8Array
 export async function* streamChat(
   settings: AISettings,
   messages: ChatMessage[],
-  systemContext?: string
+  systemContext: string | undefined,
+  chatMode: ChatMode
 ): AsyncGenerator<string, void, unknown> {
   const endpoint = getChatEndpoint(settings)
-  const body = buildBody(settings, messages, systemContext)
+  const body = buildBody(settings, messages, chatMode, systemContext)
 
   const response = await fetch(endpoint, {
     method: 'POST',

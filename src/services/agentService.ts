@@ -1,6 +1,4 @@
-import type { FileEntry } from '../vite-env.d'
 import { detectLanguage, useIDEStore } from '../store/ideStore'
-import { flattenTreeListing } from './contextService'
 
 export interface FileEdit {
   path: string
@@ -49,6 +47,67 @@ export function parseAgentEdits(content: string): FileEdit[] {
   return edits
 }
 
+const MARKDOWN_FILE_EXT = /\.(py|js|ts|tsx|jsx|html|css|json|md|txt|yaml|yml|toml|sh|rs|go|java|cpp|c|cs|rb|php|sql|env|gitignore)$/i
+
+/** Fallback when models use markdown fences instead of <file> tags. */
+export function parseMarkdownFileEdits(content: string): FileEdit[] {
+  if (/<file\s+path=/i.test(content)) return []
+
+  const edits: FileEdit[] = []
+  const seen = new Set<string>()
+
+  const add = (filePath: string, body: string) => {
+    const path = filePath.trim().replace(/^["']|["']$/g, '')
+    if (!path || !MARKDOWN_FILE_EXT.test(path) || seen.has(path)) return
+    const code = body.replace(/^\n/, '').replace(/\n$/, '')
+    if (code.length < 8) return
+    seen.add(path)
+    edits.push({ path, content: code })
+  }
+
+  let match: RegExpExecArray | null
+
+  const langPathRe = /```([\w+-]*):([^\n`]+)\s*\n([\s\S]*?)```/g
+  while ((match = langPathRe.exec(content)) !== null) {
+    add(match[2], match[3])
+  }
+  if (edits.length) return edits
+
+  const headerFenceRe =
+    /(?:^|\n)(?:\*\*([a-zA-Z0-9_./\\-]+\.[a-zA-Z0-9]+)\*\*|#{1,3}\s+([a-zA-Z0-9_./\\-]+\.[a-zA-Z0-9]+)|`([a-zA-Z0-9_./\\-]+\.[a-zA-Z0-9]+)`)\s*\n```[\w+-]*\n([\s\S]*?)```/g
+  while ((match = headerFenceRe.exec(content)) !== null) {
+    add(match[1] || match[2] || match[3], match[4])
+  }
+  if (edits.length) return edits
+
+  const fenceRe = /```([\w+-]*)\n([\s\S]*?)```/g
+  while ((match = fenceRe.exec(content)) !== null) {
+    const before = content.slice(Math.max(0, match.index - 400), match.index)
+    const nameMatch =
+      before.match(/(?:\*\*|`|#{1,3}\s+|File:\s*|Create\s+)([a-zA-Z0-9_./\\-]+\.[a-zA-Z0-9]+)\*?\s*$/i) ||
+      before.match(/([a-zA-Z0-9_./\\-]+\.[a-zA-Z0-9]+)\s*(?:\(|:|\n)\s*$/i)
+    if (nameMatch) add(nameMatch[1], match[2])
+  }
+
+  return edits
+}
+
+export function collectAgentFileEdits(content: string): FileEdit[] {
+  const fromTags = parseAgentEdits(content)
+  if (fromTags.length > 0) return fromTags
+  return parseMarkdownFileEdits(content)
+}
+
+export function normalizeShellCommand(command: string): string {
+  const trimmed = command.trim()
+  if (!trimmed.includes('&&')) return trimmed
+  if (process.platform === 'win32') {
+    const escaped = trimmed.replace(/"/g, '""')
+    return `cmd.exe /c "${escaped}"`
+  }
+  return trimmed
+}
+
 export function parseAgentCommands(content: string): string[] {
   const commands: string[] = []
   let match: RegExpExecArray | null
@@ -59,6 +118,7 @@ export function parseAgentCommands(content: string): string[] {
       .split('\n')
       .map((line) => line.trim())
       .filter(Boolean)
+      .map(normalizeShellCommand)
     commands.push(...lines)
   }
 
@@ -110,94 +170,19 @@ function pathIsInsideRoot(rootPath: string, targetPath: string): boolean {
   return target === root || target.startsWith(root + '/')
 }
 
-function flattenTree(entries: FileEntry[], prefix = ''): string[] {
-  return flattenTreeListing(entries, prefix)
+/** Parent directory of a relative path, or null for root-level files. */
+function parentDir(relPath: string): string | null {
+  const normalized = relPath.replace(/\\/g, '/').replace(/\/+$/, '')
+  const idx = normalized.lastIndexOf('/')
+  if (idx < 0) return null
+  return normalized.slice(0, idx) || null
 }
 
-export function buildAgentSystemPrompt(
-  rootPath: string | null,
-  fileTree: FileEntry[],
-  activeFile: { path: string; content: string; language: string } | null
-): string {
-  const treeListing = rootPath
-    ? flattenTree(fileTree).slice(0, 80).join('\n') || '(empty — no files yet)'
-    : '(no folder open — tell user to open a folder first)'
-
-  const rootName = rootPath?.split(/[/\\]/).pop() ?? 'project'
-  const isEmptyProject = fileTree.length === 0
-
-  const activeSection = activeFile
-    ? `\nActive file: ${activeFile.path.split(/[/\\]/).pop()}\n\`\`\`${activeFile.language}\n${activeFile.content.slice(0, 4000)}\n\`\`\``
-    : ''
-
-  return `You are a coding agent inside Spiritus Mundi IDE. You EDIT files directly in the user's project.
-
-WORKSPACE (critical):
-- The user opened folder "${rootName}" — that IS the project root. Full path: ${rootPath ?? 'NOT OPEN'}
-- You are already inside their project. Do NOT create a new wrapper folder for the whole app.
-- Put files at the root or in purposeful subfolders (src/, css/) — never ${rootName}/some-app-name/... when the workspace is already "${rootName}".
-${isEmptyProject ? '- The folder is empty: write index.html, package.json, etc. directly at the root (e.g. path="index.html").' : '- Extend the existing tree below; match its layout.'}
-
-Project files:
-${treeListing}
-${activeSection}
-
-The user may attach @context blocks (terminal output, code selections, files, folders). Treat attached context as ground truth.
-
-PATH EXAMPLES (folder "${rootName}" is open):
-- User asks for a Three.js app → <file path="index.html">, <file path="main.js">, <file path="package.json"> at root
-- WRONG → <mkdir path="threejs-animation" /> then files inside that folder (unless user explicitly named that folder)
-- OK subfolders → src/utils.ts, public/index.html when structure warrants it
-
-AGENT MODE RULES:
-1. Create/modify files with FULL content:
-<file path="index.html">
-...
-</file>
-2. Folders only when needed: <mkdir path="src/components" />
-3. Rename: <rename from="old.ts" to="new.ts" />
-4. Delete: <delete path="unused.js" />
-5. Shell: <run>npm install</run>
-6. All paths are relative to project root "${rootName}".
-7. Complete file contents only (not diffs).
-8. Applied order: mkdir → rename → file writes → delete → terminal.
-9. Use tags for every change — do not claim changes without them.
-10. If no folder is open, tell the user to open one first.`
-}
-
-export function buildChatSystemPrompt(
-  activeFile: { path: string; content: string; language: string } | null,
-  rootPath: string | null,
-  fileTree: FileEntry[] = []
-): string {
-  const treeSection =
-    rootPath && fileTree.length
-      ? `\nProject files:\n${flattenTree(fileTree).slice(0, 60).join('\n')}`
-      : ''
-
-  if (!activeFile) {
-    return `You are a helpful coding assistant in Spiritus Mundi IDE.
-Answer questions clearly. Use markdown with fenced code blocks for code examples.
-Do NOT use <file> tags — chat mode is read-only and does not modify the project.
-The user can attach @context: terminal output, code selections, files, folders, or codebase snippets. Use attached context carefully.
-${rootPath ? `Project is open at: ${rootPath}` : 'No project folder is open.'}${treeSection}`
-  }
-
-  const relativePath = rootPath
-    ? activeFile.path.replace(rootPath, '').replace(/^[/\\]/, '')
-    : activeFile.path
-
-  return `You are a helpful coding assistant in Spiritus Mundi IDE (CHAT mode — read only).
-Answer questions about the code. Use markdown with fenced code blocks.
-Do NOT use <file> tags. Suggest code in markdown blocks only.
-The user can attach @context: terminal output, code selections, files, folders, or codebase snippets.${treeSection}
-
-Open file: ${relativePath}
-\`\`\`${activeFile.language}
-${activeFile.content.slice(0, 6000)}
-\`\`\`
-
-Be concise and practical.`
+/** Reject mkdir on bare filenames like main.py — those are files, not folders. */
+function isLikelyFilePath(relPath: string): boolean {
+  const normalized = relPath.replace(/\\/g, '/').replace(/\/+$/, '')
+  if (normalized.includes('/')) return false
+  return /\.[a-zA-Z0-9]{1,8}$/.test(normalized)
 }
 
 export async function applyAgentEdits(
@@ -209,7 +194,7 @@ export async function applyAgentEdits(
 
   for (const edit of edits) {
     const fullPath = resolveProjectPath(rootPath, edit.path)
-    const result = await window.spiritus.writeFile(fullPath, edit.content)
+    const result = await window.ontology.writeFile(fullPath, edit.content)
     if (result.success) {
       applied.push(edit.path)
     } else {
@@ -228,7 +213,7 @@ export async function applyAgentCommands(
   const errors: string[] = []
 
   for (const command of commands) {
-    const result = await window.spiritus.terminal.exec(rootPath, command)
+    const result = await window.ontology.terminal.exec(rootPath, command)
     results.push({ command, ...result })
     if (!result.success) {
       errors.push(`\`${command}\` exited with code ${result.exitCode}`)
@@ -246,8 +231,12 @@ export async function applyAgentMkdirs(
   const errors: string[] = []
 
   for (const op of ops) {
+    if (isLikelyFilePath(op.path)) {
+      errors.push(`mkdir ${op.path}: looks like a file — use <file path="${op.path}"> instead`)
+      continue
+    }
     const fullPath = resolveProjectPath(rootPath, op.path)
-    const result = await window.spiritus.mkdirPath(fullPath)
+    const result = await window.ontology.mkdirPath(fullPath)
     if (result.success) {
       applied.push(op.path)
     } else {
@@ -271,7 +260,7 @@ export async function applyAgentDeletes(
       errors.push(`delete ${op.path}: cannot delete project root`)
       continue
     }
-    const result = await window.spiritus.deletePath(fullPath)
+    const result = await window.ontology.deletePath(fullPath, rootPath)
     if (result.success) {
       applied.push(op.path)
       syncTabAfterDelete(fullPath)
@@ -293,7 +282,7 @@ export async function applyAgentRenames(
   for (const op of ops) {
     const fromPath = resolveProjectPath(rootPath, op.from)
     const toPath = resolveProjectPath(rootPath, op.to)
-    const result = await window.spiritus.renamePath(fromPath, toPath)
+    const result = await window.ontology.renamePath(fromPath, toPath)
     if (result.success) {
       applied.push(`${op.from} → ${op.to}`)
       syncTabAfterRename(fromPath, toPath)
@@ -374,8 +363,20 @@ export async function applyAgentFilesystem(
     errors.push(...renameErrors)
   }
 
-  const edits = parseAgentEdits(content)
+  const edits = collectAgentFileEdits(content)
   if (edits.length > 0) {
+    const implicitDirs = [
+      ...new Set(edits.map((e) => parentDir(e.path)).filter((d): d is string => Boolean(d))),
+    ]
+    for (const dir of implicitDirs) {
+      if (!mkdirs.some((m) => m.path === dir)) {
+        const { applied } = await applyAgentMkdirs(rootPath, [{ path: dir }])
+        if (applied.length) {
+          summaryParts.push(`✓ **Created folder:** \`${dir}\``)
+        }
+      }
+    }
+
     const { applied, errors: editErrors } = await applyAgentEdits(rootPath, edits)
     if (applied.length > 0) {
       openEditedFilesInEditor(rootPath, edits.filter((e) => applied.includes(e.path)))
@@ -404,6 +405,7 @@ export function openEditedFilesInEditor(rootPath: string, edits: FileEdit[]) {
 
   for (const edit of edits) {
     const fullPath = resolveProjectPath(rootPath, edit.path)
+    store.recordRecentEdit(fullPath, 'agent')
     const name = edit.path.split(/[/\\]/).pop() || edit.path
     const existing = store.tabs.find((t) => t.path === fullPath)
 

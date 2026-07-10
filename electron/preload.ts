@@ -58,6 +58,7 @@ const api = {
   mkdirPath: (dirPath: string) =>
     ipcRenderer.invoke('fs:mkdir', dirPath) as Promise<{ success: boolean; path?: string; error?: string }>,
   refreshTree: (root: string) => ipcRenderer.invoke('fs:refreshTree', root),
+  watchFolder: (root: string) => ipcRenderer.invoke('fs:watch', root),
 
   grep: (root: string, query: string, maxResults?: number) =>
     ipcRenderer.invoke('fs:grep', root, query, maxResults) as Promise<{

@@ -119,6 +119,9 @@ export function ChatPanel() {
 
           if (turn.appliedFiles.length > 0) {
             setMessageAppliedFiles(assistantIdRef.current, turn.appliedFiles)
+          }
+
+          if (turn.fsChanged) {
             const tree = await window.ontology.refreshTree(rootPath)
             setFileTree(tree)
           }

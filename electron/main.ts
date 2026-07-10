@@ -10,6 +10,9 @@ import { loadProjectHarness, validateCommand, validateDeletePath } from './harne
 let mainWindow: BrowserWindow | null = null
 const terminals = new Map<number, pty.IPty>()
 let terminalCounter = 0
+let fsWatcher: fsSync.FSWatcher | null = null
+let fsWatchRoot: string | null = null
+let fsWatchTimer: ReturnType<typeof setTimeout> | null = null
 const execAsync = promisify(exec)
 const execFileAsync = promisify(execFile)
 
@@ -195,6 +198,10 @@ ipcMain.handle('fs:writeFile', async (_e, filePath: string, content: string) => 
     }
     await fs.mkdir(path.dirname(filePath), { recursive: true })
     await fs.writeFile(filePath, content, 'utf-8')
+    if (fsWatchRoot && filePath.startsWith(fsWatchRoot)) {
+      if (fsWatchTimer) clearTimeout(fsWatchTimer)
+      fsWatchTimer = setTimeout(() => void emitFsTree(fsWatchRoot!), 100)
+    }
     return { success: true }
   } catch (err) {
     return { success: false, error: String(err) }
@@ -265,13 +272,34 @@ ipcMain.handle('fs:refreshTree', async (_e, rootPath: string) => {
   return tree
 })
 
-ipcMain.handle('fs:watch', async (_e, rootPath: string) => {
-  if (!fsSync.existsSync(rootPath)) return
-  const watcher = fsSync.watch(rootPath, { recursive: true }, async () => {
+async function emitFsTree(rootPath: string) {
+  if (!mainWindow) return
+  try {
     const tree = await readDirRecursive(rootPath)
-    mainWindow?.webContents.send('fs:changed', tree)
+    mainWindow.webContents.send('fs:changed', tree)
+  } catch {
+    // ignore read errors during watch
+  }
+}
+
+ipcMain.handle('fs:watch', async (_e, rootPath: string) => {
+  if (fsWatcher) {
+    fsWatcher.close()
+    fsWatcher = null
+  }
+  if (fsWatchTimer) {
+    clearTimeout(fsWatchTimer)
+    fsWatchTimer = null
+  }
+
+  fsWatchRoot = rootPath
+  if (!fsSync.existsSync(rootPath)) return
+
+  fsWatcher = fsSync.watch(rootPath, { recursive: true }, () => {
+    if (!fsWatchRoot) return
+    if (fsWatchTimer) clearTimeout(fsWatchTimer)
+    fsWatchTimer = setTimeout(() => void emitFsTree(fsWatchRoot!), 150)
   })
-  return () => watcher.close()
 })
 
 // ─── Search & Git context ─────────────────────────────────────

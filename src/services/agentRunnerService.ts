@@ -16,6 +16,7 @@ export interface AgentTurnResult {
   errors: string[]
   verifyFailed: boolean
   verifyDetail: string
+  fsChanged: boolean
 }
 
 export async function finishAgentTurn(
@@ -28,12 +29,14 @@ export async function finishAgentTurn(
   let appliedFiles: string[] = []
   let verifyFailed = false
   let verifyDetail = ''
+  let fsChanged = false
 
   if (!options.skipApply) {
     const fsResult = await applyAgentFilesystem(rootPath, fullContent)
     summaryParts.push(...fsResult.summaryParts)
     errors.push(...fsResult.errors)
     appliedFiles = fsResult.appliedFiles
+    fsChanged = fsResult.changed
 
     if (appliedFiles.length > 0) {
       const verify = await verifyAppliedFiles(rootPath, appliedFiles)
@@ -86,5 +89,6 @@ export async function finishAgentTurn(
     errors,
     verifyFailed,
     verifyDetail,
+    fsChanged,
   }
 }

@@ -62,6 +62,7 @@ export default function App() {
 
   useEffect(() => {
     if (!rootPath) return
+    void window.ontology.watchFolder(rootPath)
     const unsub = window.ontology.onFsChanged((tree) => setFileTree(tree))
     return unsub
   }, [rootPath, setFileTree])

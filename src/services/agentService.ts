@@ -1,4 +1,5 @@
 import { detectLanguage, useIDEStore } from '../store/ideStore'
+import { parseAgentMessageBlocks } from '../lib/agentMessageParser'
 
 export interface FileEdit {
   path: string
@@ -74,9 +75,9 @@ export function parseMarkdownFileEdits(content: string): FileEdit[] {
   if (edits.length) return edits
 
   const headerFenceRe =
-    /(?:^|\n)(?:\*\*([a-zA-Z0-9_./\\-]+\.[a-zA-Z0-9]+)\*\*|#{1,3}\s+([a-zA-Z0-9_./\\-]+\.[a-zA-Z0-9]+)|`([a-zA-Z0-9_./\\-]+\.[a-zA-Z0-9]+)`)\s*\n```[\w+-]*\n([\s\S]*?)```/g
+    /(?:^|\n)(?:\*\*([a-zA-Z0-9_./\\-]+\.[a-zA-Z0-9]+)\*\*|#{1,3}\s+([a-zA-Z0-9_./\\-]+\.[a-zA-Z0-9]+)|`([a-zA-Z0-9_./\\-]+\.[a-zA-Z0-9]+)`|([a-zA-Z0-9_./\\-]+\.[a-zA-Z0-9]+))\s*\n```[\w+-]*\n([\s\S]*?)```/g
   while ((match = headerFenceRe.exec(content)) !== null) {
-    add(match[1] || match[2] || match[3], match[4])
+    add(match[1] || match[2] || match[3] || match[4], match[5])
   }
   if (edits.length) return edits
 
@@ -92,10 +93,36 @@ export function parseMarkdownFileEdits(content: string): FileEdit[] {
   return edits
 }
 
+/** Match chat UI blocks — if the agent shows a file card, write that file. */
+export function collectEditsFromDisplayBlocks(content: string): FileEdit[] {
+  const main = content.split(/\n---\n/)[0] ?? content
+  const blocks = parseAgentMessageBlocks(main)
+  const edits: FileEdit[] = []
+  const seen = new Set<string>()
+
+  for (const block of blocks) {
+    if (block.type === 'file') {
+      if (!seen.has(block.path) && block.content.length >= 8) {
+        seen.add(block.path)
+        edits.push({ path: block.path, content: block.content })
+      }
+    } else if (block.type === 'code' && block.path && MARKDOWN_FILE_EXT.test(block.path)) {
+      if (!seen.has(block.path) && block.content.length >= 8) {
+        seen.add(block.path)
+        edits.push({ path: block.path, content: block.content })
+      }
+    }
+  }
+
+  return edits
+}
+
 export function collectAgentFileEdits(content: string): FileEdit[] {
   const fromTags = parseAgentEdits(content)
   if (fromTags.length > 0) return fromTags
-  return parseMarkdownFileEdits(content)
+  const fromMarkdown = parseMarkdownFileEdits(content)
+  if (fromMarkdown.length > 0) return fromMarkdown
+  return collectEditsFromDisplayBlocks(content)
 }
 
 export function normalizeShellCommand(command: string): string {
@@ -338,15 +365,17 @@ function syncTabAfterRename(oldPath: string, newPath: string) {
 export async function applyAgentFilesystem(
   rootPath: string,
   content: string
-): Promise<{ summaryParts: string[]; errors: string[]; appliedFiles: string[] }> {
+): Promise<{ summaryParts: string[]; errors: string[]; appliedFiles: string[]; changed: boolean }> {
   const summaryParts: string[] = []
   const errors: string[] = []
   let appliedFiles: string[] = []
+  let changed = false
 
   const mkdirs = parseAgentMkdirs(content)
   if (mkdirs.length > 0) {
     const { applied, errors: mkdirErrors } = await applyAgentMkdirs(rootPath, mkdirs)
     if (applied.length) {
+      changed = true
       summaryParts.push(
         `✓ **Created ${applied.length} folder${applied.length > 1 ? 's' : ''}:** ${applied.map((p) => `\`${p}\``).join(', ')}`
       )
@@ -358,6 +387,7 @@ export async function applyAgentFilesystem(
   if (renames.length > 0) {
     const { applied, errors: renameErrors } = await applyAgentRenames(rootPath, renames)
     if (applied.length) {
+      changed = true
       summaryParts.push(`✓ **Renamed ${applied.length}:** ${applied.map((p) => `\`${p}\``).join(', ')}`)
     }
     errors.push(...renameErrors)
@@ -372,6 +402,7 @@ export async function applyAgentFilesystem(
       if (!mkdirs.some((m) => m.path === dir)) {
         const { applied } = await applyAgentMkdirs(rootPath, [{ path: dir }])
         if (applied.length) {
+          changed = true
           summaryParts.push(`✓ **Created folder:** \`${dir}\``)
         }
       }
@@ -379,6 +410,7 @@ export async function applyAgentFilesystem(
 
     const { applied, errors: editErrors } = await applyAgentEdits(rootPath, edits)
     if (applied.length > 0) {
+      changed = true
       openEditedFilesInEditor(rootPath, edits.filter((e) => applied.includes(e.path)))
       appliedFiles = applied
       summaryParts.push(
@@ -392,12 +424,13 @@ export async function applyAgentFilesystem(
   if (deletes.length > 0) {
     const { applied, errors: deleteErrors } = await applyAgentDeletes(rootPath, deletes)
     if (applied.length) {
+      changed = true
       summaryParts.push(`✓ **Deleted ${applied.length}:** ${applied.map((p) => `\`${p}\``).join(', ')}`)
     }
     errors.push(...deleteErrors)
   }
 
-  return { summaryParts, errors, appliedFiles }
+  return { summaryParts, errors, appliedFiles, changed }
 }
 
 export function openEditedFilesInEditor(rootPath: string, edits: FileEdit[]) {

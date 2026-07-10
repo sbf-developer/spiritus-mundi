@@ -3,7 +3,7 @@
  *
  * Loads agent instructions from the opened workspace:
  *   .ontology/rules/*.mdc   — scoped rules (alwaysApply + globs)
- *   .ontology/skills/*/SKILL.md — skill playbooks
+ *   .ontology/skills/<name>/SKILL.md — skill playbooks
  *   AGENTS.md, .ontologyrules, .cursor/rules — legacy / compat
  *
  * Also exports validateCommand / validateDeletePath for agent safety.

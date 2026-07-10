@@ -1,3 +1,9 @@
+/**
+ * Sidebar file tree — browse, open, create files/folders.
+ *
+ * Data: fileTree from ideStore (refreshed by watcher or manual refresh).
+ * Click file → openFileAsTab (lib/files.ts) → openTab in store.
+ */
 import { useState, useCallback } from 'react'
 import {
   ChevronRight,
@@ -191,6 +197,8 @@ export function FileExplorer({ onOpenFolder }: FileExplorerProps) {
     </div>
   )
 }
+
+// ─── Recursive tree row (files + expandable folders) ─────────────
 
 function TreeNode({
   entry,

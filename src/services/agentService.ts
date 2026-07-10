@@ -1,3 +1,22 @@
+/**
+ * Agent output parser + filesystem applier.
+ *
+ * The model emits structured XML-like tags; this module:
+ *   1. Parses tags → FileEdit / mkdir / delete / rename / run commands
+ *   2. Applies them to disk via window.ontology (IPC → main process)
+ *   3. Opens written files in the Monaco editor
+ *
+ * Parsing fallbacks (when model skips <file> tags):
+ *   - Markdown fences with filenames
+ *   - Same blocks shown in chat UI (collectEditsFromDisplayBlocks)
+ *
+ * Sections:
+ *   A. Tag regex + types
+ *   B. Parsing (extract intent from model text)
+ *   C. Path helpers
+ *   D. Apply operations (write / mkdir / delete / rename / shell)
+ *   E. Editor sync + tag stripping utilities
+ */
 import { detectLanguage, useIDEStore } from '../store/ideStore'
 import { parseAgentMessageBlocks } from '../lib/agentMessageParser'
 
@@ -32,6 +51,8 @@ export interface CommandResult {
   stderr: string
   exitCode: number
 }
+
+// ─── B. Parsing: <file> tags ───────────────────────────────────
 
 export function parseAgentEdits(content: string): FileEdit[] {
   const edits: FileEdit[] = []
@@ -125,6 +146,8 @@ export function collectAgentFileEdits(content: string): FileEdit[] {
   return collectEditsFromDisplayBlocks(content)
 }
 
+// ─── B2. Shell command normalization (Windows && fix) ────────────
+
 export function normalizeShellCommand(command: string): string {
   const trimmed = command.trim()
   if (!trimmed.includes('&&')) return trimmed
@@ -134,6 +157,8 @@ export function normalizeShellCommand(command: string): string {
   }
   return trimmed
 }
+
+// ─── B3. Parse <run>, <mkdir>, <delete>, <rename> tags ─────────
 
 export function parseAgentCommands(content: string): string[] {
   const commands: string[] = []
@@ -182,6 +207,8 @@ export function parseAgentRenames(content: string): FsRenameOp[] {
   return ops
 }
 
+// ─── C. Path helpers ─────────────────────────────────────────────
+
 export function resolveProjectPath(rootPath: string, filePath: string): string {
   const normalized = filePath.replace(/\\/g, '/').replace(/^\.\/+/, '')
   if (/^[a-zA-Z]:/.test(normalized) || normalized.startsWith('/')) {
@@ -212,6 +239,8 @@ function isLikelyFilePath(relPath: string): boolean {
   return /\.[a-zA-Z0-9]{1,8}$/.test(normalized)
 }
 
+// ─── D. Apply: write files to disk ───────────────────────────────
+
 export async function applyAgentEdits(
   rootPath: string,
   edits: FileEdit[]
@@ -232,6 +261,8 @@ export async function applyAgentEdits(
   return { applied, errors }
 }
 
+// ─── D2. Apply: shell commands (<run> tags) ──────────────────────
+
 export async function applyAgentCommands(
   rootPath: string,
   commands: string[]
@@ -249,6 +280,8 @@ export async function applyAgentCommands(
 
   return { results, errors }
 }
+
+// ─── D3. Apply: mkdir / delete / rename ──────────────────────────
 
 export async function applyAgentMkdirs(
   rootPath: string,
@@ -362,6 +395,8 @@ function syncTabAfterRename(oldPath: string, newPath: string) {
   }))
 }
 
+// ─── D4. Orchestrator: mkdir → rename → writes → delete (in order) ─
+
 export async function applyAgentFilesystem(
   rootPath: string,
   content: string
@@ -433,6 +468,8 @@ export async function applyAgentFilesystem(
   return { summaryParts, errors, appliedFiles, changed }
 }
 
+// ─── E. Editor sync — open tabs for files the agent wrote ────────
+
 export function openEditedFilesInEditor(rootPath: string, edits: FileEdit[]) {
   const store = useIDEStore.getState()
 
@@ -461,6 +498,8 @@ export function openEditedFilesInEditor(rootPath: string, edits: FileEdit[]) {
     }
   }
 }
+
+// ─── E2. Tag stripping (clean model text for display) ────────────
 
 export function stripFileTags(content: string): string {
   return content.replace(FILE_TAG_RE, '')

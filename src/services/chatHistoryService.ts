@@ -1,4 +1,9 @@
-/** Chat history compaction for long sessions (Cursor-style context window management). */
+/**
+ * Chat history compaction — keep API calls within token limits.
+ *
+ * Long sessions: summarize older turns, keep last N messages verbatim.
+ * Used by ChatPanel before calling streamChat().
+ */
 
 import type { ChatMessage } from '../store/ideStore'
 
@@ -11,6 +16,8 @@ function summarizeTurn(msg: ChatMessage): string {
   return line.length > 120 ? line.slice(0, 120) + '…' : line
 }
 
+// ─── Summarize dropped messages when history exceeds limits ──────
+
 function buildOlderSummary(messages: ChatMessage[]): string {
   const lines: string[] = []
   for (const m of messages) {
@@ -21,6 +28,8 @@ function buildOlderSummary(messages: ChatMessage[]): string {
   }
   return lines.slice(-20).join('\n')
 }
+
+// ─── Public API ──────────────────────────────────────────────────
 
 export function compactMessagesForApi(messages: ChatMessage[]): ChatMessage[] {
   if (messages.length <= MAX_API_MESSAGES) {

@@ -1,3 +1,7 @@
+/**
+ * Compact action row in agent messages — RUN, DIR, DEL, MV badges.
+ * Used by AgentMessageRenderer for non-code agent operations.
+ */
 import { useState } from 'react'
 import { ChevronRight } from 'lucide-react'
 

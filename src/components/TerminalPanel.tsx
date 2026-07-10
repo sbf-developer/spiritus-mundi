@@ -1,3 +1,10 @@
+/**
+ * Integrated terminal — xterm.js UI wired to node-pty in Electron main.
+ *
+ * Interactive shell: user types → terminal.input → PTY output → xterm.write
+ * Agent commands: terminal.exec (separate one-shot, used by agentService)
+ * Terminal buffer in ideStore powers @terminal context attachments.
+ */
 import { useEffect, useRef } from 'react'
 import { Terminal as XTerm } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
@@ -17,6 +24,8 @@ export function TerminalPanel() {
   const containerRef = useRef<HTMLDivElement>(null)
   const termsRef = useRef<TermInstance[]>([])
   const { rootPath, theme, addTerminalToChat, showChat } = useIDEStore()
+
+  // ─── Spawn PTY + xterm instance ────────────────────────────────
 
   const spawnTerminal = async () => {
     if (!containerRef.current) return
@@ -57,6 +66,8 @@ export function TerminalPanel() {
 
     return () => ro.disconnect()
   }
+
+  // ─── Lifecycle: connect IPC streams, cleanup on unmount ────────
 
   useEffect(() => {
     spawnTerminal()

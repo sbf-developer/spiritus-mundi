@@ -1,4 +1,15 @@
-/** Agent turn orchestration — apply, verify, run commands. */
+/**
+ * One agent turn — orchestrates apply → verify → shell commands.
+ *
+ * Called by ChatPanel after the model finishes streaming.
+ * Does NOT call the LLM; only executes what the model already wrote.
+ *
+ * Steps:
+ *   1. applyAgentFilesystem — write files / mkdir / delete / rename
+ *   2. verifyAppliedFiles   — py_compile, npm typecheck/lint
+ *   3. applyAgentCommands   — run <run> tags in integrated terminal
+ *   4. Append summary block (✓ lines + ⚠ errors) to chat message
+ */
 
 import { useIDEStore } from '../store/ideStore'
 import {

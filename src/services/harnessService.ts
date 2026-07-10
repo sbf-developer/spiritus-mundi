@@ -1,4 +1,10 @@
-/** Harness layer — scoped rules, skills, and command safety (Cursor-style). */
+/**
+ * Harness layer — filter rules/skills for the current context (renderer-side).
+ *
+ * Raw files are loaded in electron/harnessLoader.ts via IPC.
+ * This module selects which rules apply (alwaysApply + glob match on active file)
+ * and which skills match the user's query keywords.
+ */
 
 export interface HarnessRule {
   id: string
@@ -61,6 +67,8 @@ function relevanceScore(corpus: string, query: string): number {
   return hits / q.size
 }
 
+// ─── Rule/skill selection for contextOntology ────────────────────
+
 export function selectRulesForContext(all: HarnessRule[], ctx: RuleSelectionContext): HarnessRule[] {
   const paths = [ctx.activeRel, ...ctx.attachedPaths].filter(Boolean) as string[]
 
@@ -97,6 +105,8 @@ export function selectSkillsForContext(
   return scored.slice(0, max).map((s) => s.skill)
 }
 
+// ─── Command safety (mirrors electron/harnessLoader) ─────────────
+
 const BLOCKED_COMMAND_PATTERNS: { pattern: RegExp; reason: string }[] = [
   { pattern: /\brm\s+-rf\s+\/(?!tmp\b|var\/tmp)/i, reason: 'Recursive delete of system root is blocked' },
   { pattern: /\brmdir\s+\/s\s+\/q\s+[a-z]:\\/i, reason: 'Drive wipe commands are blocked' },
@@ -118,6 +128,8 @@ export function validateAgentCommand(command: string): { allowed: boolean; reaso
 
   return { allowed: true }
 }
+
+// ─── Format for LLM prompt layers ────────────────────────────────
 
 export function formatRulesForPrompt(rules: HarnessRule[]): string {
   if (rules.length === 0) return ''

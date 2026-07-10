@@ -1,3 +1,9 @@
+/**
+ * Collapsible code block — used in chat for files, snippets, and diffs.
+ *
+ * Variants: default (chat markdown) vs agent (compact header with PY/TS badge).
+ * "Apply" button lets user manually save a code fence to a new file.
+ */
 import { useState } from 'react'
 import { Copy, Check, ChevronRight } from 'lucide-react'
 import { extBadge } from '../lib/agentMessageParser'
@@ -114,6 +120,8 @@ function highlightCode(line: string, language: string): React.ReactNode[] {
   if (parts.length === 0) return [line]
   return parts
 }
+
+// ─── Component ───────────────────────────────────────────────────
 
 interface CodeBoxProps {
   meta: CodeBoxMeta

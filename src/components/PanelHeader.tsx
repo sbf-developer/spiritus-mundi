@@ -1,3 +1,4 @@
+/** Shared panel title row (Explorer, Terminal, Chat, Settings). */
 import { IconButton } from './IconButton'
 
 interface PanelHeaderProps {

@@ -1,3 +1,7 @@
+/**
+ * Vite build config — bundles React renderer + Electron main/preload.
+ * node-pty is external (native module compiled at install time).
+ */
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import electron from 'vite-plugin-electron/simple'

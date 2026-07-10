@@ -1,3 +1,7 @@
+/**
+ * Open a disk file as an editor tab (code or image preview).
+ * Called from FileExplorer when user clicks a file.
+ */
 import { detectLanguage } from '../store/ideStore'
 import type { OpenTab } from '../store/ideStore'
 

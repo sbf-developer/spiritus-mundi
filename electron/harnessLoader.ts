@@ -1,3 +1,13 @@
+/**
+ * Project harness loader — runs in Electron main (Node fs access).
+ *
+ * Loads agent instructions from the opened workspace:
+ *   .ontology/rules/*.mdc   — scoped rules (alwaysApply + globs)
+ *   .ontology/skills/*/SKILL.md — skill playbooks
+ *   AGENTS.md, .ontologyrules, .cursor/rules — legacy / compat
+ *
+ * Also exports validateCommand / validateDeletePath for agent safety.
+ */
 import fs from 'fs/promises'
 import fsSync from 'fs'
 import path from 'path'
@@ -22,6 +32,8 @@ export interface RawHarnessBundle {
   rules: RawHarnessRule[]
   skills: RawHarnessSkill[]
 }
+
+// ─── Frontmatter parsing (.mdc / SKILL.md) ───────────────────────
 
 function parseFrontmatter(raw: string): { meta: Record<string, string | boolean>; body: string } {
   if (!raw.startsWith('---')) return { meta: {}, body: raw.trim() }
@@ -62,6 +74,8 @@ async function readTextFile(filePath: string, maxBytes = 48 * 1024): Promise<str
   }
 }
 
+// ─── Load .ontology/rules and .cursor/rules ────────────────────
+
 async function loadRulesDir(dirPath: string, prefix: string): Promise<RawHarnessRule[]> {
   if (!fsSync.existsSync(dirPath)) return []
 
@@ -95,6 +109,8 @@ async function loadRulesDir(dirPath: string, prefix: string): Promise<RawHarness
   return rules
 }
 
+// ─── Load .ontology/skills/*/SKILL.md ────────────────────────────
+
 async function loadSkillsDir(dirPath: string): Promise<RawHarnessSkill[]> {
   if (!fsSync.existsSync(dirPath)) return []
 
@@ -123,6 +139,8 @@ async function loadSkillsDir(dirPath: string): Promise<RawHarnessSkill[]> {
 
   return skills
 }
+
+// ─── Legacy rule files (root-level markdown) ─────────────────────
 
 async function loadLegacyRules(rootPath: string): Promise<RawHarnessRule[]> {
   const candidates = [
@@ -177,6 +195,8 @@ async function loadNestedAgentsMd(rootPath: string, activeRel?: string): Promise
   return rules
 }
 
+// ─── Public API: load full harness bundle ────────────────────────
+
 export async function loadProjectHarness(rootPath: string, activeRel?: string): Promise<RawHarnessBundle> {
   const [ontologyRules, cursorRules, ontologySkills, legacy, nested] = await Promise.all([
     loadRulesDir(path.join(rootPath, '.ontology', 'rules'), '.ontology/rules'),
@@ -196,6 +216,8 @@ export async function loadProjectHarness(rootPath: string, activeRel?: string): 
     skills: ontologySkills,
   }
 }
+
+// ─── Agent safety: block destructive commands / deletes ──────────
 
 const BLOCKED_COMMAND_PATTERNS: { pattern: RegExp; reason: string }[] = [
   { pattern: /\brm\s+-rf\s+\/(?!tmp\b|var\/tmp)/i, reason: 'Recursive delete of system root is blocked' },

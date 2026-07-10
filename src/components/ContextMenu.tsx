@@ -1,3 +1,6 @@
+/**
+ * Right-click menu + inline name prompt for explorer file/folder creation.
+ */
 import { useEffect, useRef } from 'react'
 import { FilePlus, FolderPlus } from 'lucide-react'
 

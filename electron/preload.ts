@@ -1,3 +1,16 @@
+/**
+ * Preload bridge — the ONLY link between React and Electron main.
+ *
+ * contextBridge.exposeInMainWorld('ontology', api) defines window.ontology.
+ * React code must never import electron directly; use window.ontology instead.
+ *
+ * Groups in `api`:
+ *   - Filesystem (read/write/tree/watch/grep)
+ *   - Harness (rules + skills from disk)
+ *   - Terminal (interactive PTY + agent exec)
+ *   - Settings + window controls
+ *   - Event subscriptions (onFsChanged, onMenuOpenFolder, terminal streams)
+ */
 import { contextBridge, ipcRenderer } from 'electron'
 
 export interface FileEntry {
@@ -24,9 +37,11 @@ export interface AppSettings {
 const api = {
   platform: process.platform,
 
+  // ─── Folder picker ─────────────────────────────────────────────
   openFolder: (): Promise<{ path: string; tree: FileEntry[] } | null> =>
     ipcRenderer.invoke('dialog:openFolder'),
 
+  // ─── Filesystem ──────────────────────────────────────────────
   readFile: (path: string) => ipcRenderer.invoke('fs:readFile', path),
   readFileBase64: (path: string) => ipcRenderer.invoke('fs:readFileBase64', path),
   writeFile: (path: string, content: string) => ipcRenderer.invoke('fs:writeFile', path, content),
@@ -60,6 +75,7 @@ const api = {
   refreshTree: (root: string) => ipcRenderer.invoke('fs:refreshTree', root),
   watchFolder: (root: string) => ipcRenderer.invoke('fs:watch', root),
 
+  // ─── Codebase search + git ───────────────────────────────────
   grep: (root: string, query: string, maxResults?: number) =>
     ipcRenderer.invoke('fs:grep', root, query, maxResults) as Promise<{
       success: boolean
@@ -80,6 +96,7 @@ const api = {
         }
     >,
 
+  // ─── Live tree updates (main → renderer) ─────────────────────
   onFsChanged: (cb: (tree: FileEntry[]) => void) => {
     const handler = (_: unknown, tree: FileEntry[]) => cb(tree)
     ipcRenderer.on('fs:changed', handler)
@@ -91,6 +108,7 @@ const api = {
     return () => ipcRenderer.removeListener('menu:open-folder', cb)
   },
 
+  // ─── Terminal (PTY + agent one-shot exec) ────────────────────
   terminal: {
     create: (cwd?: string) => ipcRenderer.invoke('terminal:create', cwd),
     input: (id: number, data: string) => ipcRenderer.send('terminal:input', id, data),
@@ -121,6 +139,7 @@ const api = {
     },
   },
 
+  // ─── Persisted app settings ────────────────────────────────────
   settings: {
     get: (): Promise<AppSettings | null> => ipcRenderer.invoke('settings:get'),
     save: (settings: AppSettings) => ipcRenderer.invoke('settings:save', settings),

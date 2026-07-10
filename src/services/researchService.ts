@@ -1,4 +1,10 @@
-/** Pre-flight research — project manifest + targeted file reads before the model responds. */
+/**
+ * Pre-flight research — gather context before the model responds.
+ *
+ * Reads manifest files (package.json, etc.), grep for query terms,
+ * and loads files mentioned in the user's message. Fed into contextOntology
+ * as the "research" layer.
+ */
 
 import type { FileEntry } from '../vite-env.d'
 import { extractSearchTerms, pickGrepQuery, type GrepHit } from './contextService'
@@ -18,6 +24,8 @@ const MANIFEST_FILES = [
 ]
 
 const PATH_IN_QUERY_RE = /\b([a-zA-Z0-9_./\\-]+\.(?:py|ts|tsx|js|jsx|json|md|html|css|rs|go|toml|yaml|yml))\b/g
+
+// ─── Read key config files from project root ─────────────────────
 
 export async function gatherProjectManifest(rootPath: string): Promise<string> {
   const sep = rootPath.includes('\\') ? '\\' : '/'
@@ -53,6 +61,8 @@ export interface ResearchResult {
   autoSnippets: { rel: string; language: string; content: string }[]
   mentionedFiles: { rel: string; language: string; content: string }[]
 }
+
+// ─── Main entry: parallel manifest + grep + mentioned files ────────
 
 export async function runDeepResearch(
   rootPath: string,
@@ -96,6 +106,8 @@ export async function runDeepResearch(
 
   return { manifest, grepHits, autoSnippets, mentionedFiles }
 }
+
+// ─── Format research results as contextOntology "research" layer ─
 
 export function formatResearchLayer(research: ResearchResult): string {
   const parts: string[] = [

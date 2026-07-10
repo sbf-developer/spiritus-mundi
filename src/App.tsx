@@ -1,3 +1,18 @@
+/**
+ * App shell — layout and global lifecycle.
+ *
+ * ┌ TitleBar ─────────────────────────────────────────────┐
+ * │ Activity │ Sidebar      │ Editor + Terminal │ Chat   │
+ * │ bar      │ (explorer /  │                   │ panel  │
+ * │          │  settings)   │                   │        │
+ * └──────────┴──────────────┴───────────────────┴────────┘
+ *
+ * Responsibilities here only:
+ *   - Open folder + start file watcher
+ *   - Keyboard shortcuts (Ctrl+O)
+ *   - Panel visibility and resize handles
+ *   (Business logic lives in services + ideStore.)
+ */
 import { useEffect, useCallback } from 'react'
 import { Files, Settings, Terminal } from 'lucide-react'
 import { useIDEStore } from './store/ideStore'
@@ -32,6 +47,7 @@ export default function App() {
 
   const { theme, toggleTheme } = useTheme()
 
+  // ─── Startup: theme + folder open + file watcher ─────────────────
   useEffect(() => {
     loadSavedTheme()
   }, [])

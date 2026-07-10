@@ -1,3 +1,9 @@
+/**
+ * Plan mode UI — agent proposes a plan before writing files.
+ *
+ * PlanModeToggle: enables plan phase (ChatPanel sends phase='plan').
+ * PendingPlanBar: after plan streams, user clicks Approve & Build → execute phase.
+ */
 import { ClipboardList } from 'lucide-react'
 import { useIDEStore } from '../store/ideStore'
 
@@ -23,6 +29,7 @@ export function PlanModeToggle() {
   )
 }
 
+/** Shown below chat when a plan is waiting for user approval. */
 export function PendingPlanBar() {
   const { pendingPlan, setPendingPlan, isStreaming } = useIDEStore()
 

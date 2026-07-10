@@ -1,3 +1,11 @@
+/**
+ * BYOM LLM client — streams chat completions from configured provider.
+ *
+ * Providers: Ollama (local), OpenAI, DeepSeek, custom OpenAI-compatible URL.
+ * Temperature + max tokens are fixed per mode (agent vs chat), not in Settings UI.
+ *
+ * Main export: streamChat() — async generator yielding text chunks for ChatPanel.
+ */
 import type { AISettings } from '../vite-env.d'
 import type { ChatMessage, ChatMode } from '../store/ideStore'
 
@@ -17,6 +25,8 @@ const PROVIDER_DEFAULTS: Record<AISettings['provider'], { baseUrl: string; model
 export function getProviderDefaults(provider: AISettings['provider']) {
   return PROVIDER_DEFAULTS[provider]
 }
+
+// ─── HTTP helpers (OpenAI-compatible streaming) ───────────────────
 
 function buildHeaders(settings: AISettings): HeadersInit {
   const headers: Record<string, string> = {
@@ -127,6 +137,8 @@ async function* parseOllamaStream(reader: ReadableStreamDefaultReader<Uint8Array
     }
   }
 }
+
+// ─── Public API: streaming chat completion ───────────────────────
 
 export async function* streamChat(
   settings: AISettings,

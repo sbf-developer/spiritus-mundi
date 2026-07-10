@@ -1,3 +1,7 @@
+/**
+ * TypeScript global types for the renderer process.
+ * window.ontology shape comes from electron/preload.ts (OntologyAPI).
+ */
 /// <reference types="vite/client" />
 
 import type { OntologyAPI, AISettings, FileEntry, AppSettings, Theme } from '../electron/preload'

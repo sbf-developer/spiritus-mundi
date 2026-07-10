@@ -6,6 +6,8 @@ A minimalist, local coding IDE for software engineers. Clean file explorer, Mona
 
 ![Ontology IDE — agent writing and running Python in your project](docs/screenshot.png)
 
+**New to the codebase?** Start with [CODEBASE.md](./CODEBASE.md) — architecture map, agent flow, and file guide.
+
 ## Features
 - **File Explorer** — Browse, open, create files and folders
 - **Code Editor** — Monaco editor with syntax highlighting, tabs, Ctrl+S save

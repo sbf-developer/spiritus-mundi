@@ -1,5 +1,16 @@
+/**
+ * @-context system — attach snippets to chat messages.
+ *
+ * Powers the ChatContextBar picker (type @ in chat):
+ *   - Files, folders, code selections, terminal output
+ *   - Codebase grep search, git status, project rules
+ *
+ * Also provides helpers used by contextOntology (grep, tree listing, auto snippets).
+ */
 import type { FileEntry } from '../vite-env.d'
 import { detectLanguage } from '../store/ideStore'
+
+// ─── Shared types for @ attachments and editor context ───────────
 
 export type ContextItemType =
   | 'terminal'
@@ -44,6 +55,8 @@ const TEXT_EXTENSIONS = new Set([
 ])
 
 const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'dist-electron', 'build', '.next', 'coverage'])
+
+// ─── Path / search utilities (shared with contextOntology) ───────
 
 export function stripAnsi(text: string): string {
   return text.replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, '')
@@ -108,6 +121,8 @@ export function flattenTreeListing(entries: FileEntry[], prefix = ''): string[] 
   }
   return lines
 }
+
+// ─── ContextItem factories (one per @ attachment type) ───────────
 
 export function createTerminalContext(content: string): ContextItem {
   const cleaned = stripAnsi(content).trim()
@@ -203,6 +218,8 @@ function findFolder(entries: FileEntry[], targetPath: string): FileEntry | null 
   return null
 }
 
+// ─── Codebase grep search (@ menu) ───────────────────────────────
+
 export async function searchCodebaseContext(
   rootPath: string,
   fileTree: FileEntry[],
@@ -292,6 +309,8 @@ export async function searchCodebaseContext(
   }
 }
 
+// ─── Auto-load file snippets from grep hits (contextOntology) ────
+
 export async function loadAutoSnippets(
   rootPath: string,
   grepHits: { rel: string; path: string }[],
@@ -322,6 +341,8 @@ export async function loadAutoSnippets(
 
   return snippets
 }
+
+// ─── Format attached items for LLM prompt ────────────────────────
 
 export function formatContextForPrompt(items: ContextItem[]): string {
   if (items.length === 0) return ''
@@ -381,6 +402,8 @@ export interface ContextPickerOption {
   label: string
   detail?: string
 }
+
+// ─── @ picker options (ChatContextBar dropdown) ───────────────────
 
 export function buildContextPickerOptions(
   fileTree: FileEntry[],

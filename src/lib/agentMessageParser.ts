@@ -1,3 +1,11 @@
+/**
+ * Parse agent assistant messages into typed UI blocks.
+ *
+ * Input: raw markdown + XML-like tags from the model
+ * Output: AgentMessageBlock[] consumed by AgentMessageRenderer
+ *
+ * Block types: text | file | code | mkdir | delete | rename | run | summary
+ */
 export type AgentMessageBlock =
   | { type: 'text'; content: string }
   | { type: 'file'; path: string; content: string }
@@ -12,6 +20,8 @@ const AGENT_TAG_RE =
   /<file\s+path=["']([^"']+)["']\s*>([\s\S]*?)<\/file>|<mkdir\s+path=["']([^"']+)["']\s*\/?>|<delete\s+path=["']([^"']+)["']\s*\/?>|<(?:rename|move)\s+from=["']([^"']+)["']\s+to=["']([^"']+)["']\s*\/?>|<run>([\s\S]*?)<\/run>/gi
 
 const MARKDOWN_FILE_EXT = /\.(py|js|ts|tsx|jsx|html|css|json|md|txt|yaml|yml|toml|sh|rs|go|java|cpp|c|cs|rb|php|sql|env|gitignore)$/i
+
+// ─── Helpers: infer filename from prose before a code fence ──────
 
 function looksLikeCode(text: string): boolean {
   const t = text.trim()
@@ -30,6 +40,8 @@ function inferFilename(before: string, lang: string): string | undefined {
   if (lang === 'typescript' || lang === 'ts') return 'script.ts'
   return undefined
 }
+
+// ─── Split prose segment into text + fenced code blocks ──────────
 
 function expandTextSegment(text: string, globalOffset: number, fullContent: string): AgentMessageBlock[] {
   const trimmed = text.trim()
@@ -87,6 +99,8 @@ function expandTextSegment(text: string, globalOffset: number, fullContent: stri
 
   return blocks
 }
+
+// ─── Main parser: split full message into renderable blocks ──────
 
 export function parseAgentMessageBlocks(content: string): AgentMessageBlock[] {
   const blocks: AgentMessageBlock[] = []

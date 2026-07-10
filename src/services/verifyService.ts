@@ -1,4 +1,9 @@
-/** Post-edit sensors — verify agent output after files are written. */
+/**
+ * Post-edit verification — run after agent writes files.
+ *
+ * Checks: Python py_compile, npm typecheck/lint (if package.json has script).
+ * Failures trigger auto-fix retry in ChatPanel (fix phase).
+ */
 
 import { normalizeShellCommand } from './agentService'
 
@@ -11,6 +16,7 @@ export async function verifyAppliedFiles(rootPath: string, relativePaths: string
   const lines: string[] = []
   let ok = true
 
+  // Python: syntax check each .py file the agent wrote
   const pyFiles = relativePaths.filter((p) => p.endsWith('.py'))
   for (const rel of pyFiles) {
     const cmd = normalizeShellCommand(`python -m py_compile "${rel.replace(/"/g, '""')}"`)
@@ -24,6 +30,7 @@ export async function verifyAppliedFiles(rootPath: string, relativePaths: string
     }
   }
 
+  // TypeScript: run package.json typecheck/lint script if present
   const tsFiles = relativePaths.filter((p) => /\.(ts|tsx)$/.test(p))
   if (tsFiles.length > 0) {
     const sep = rootPath.includes('\\') ? '\\' : '/'

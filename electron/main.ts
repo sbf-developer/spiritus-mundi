@@ -1,3 +1,18 @@
+/**
+ * Electron main process — Node.js side of Ontology.
+ *
+ * The renderer (React) cannot touch the filesystem or spawn shells directly.
+ * Everything privileged goes through ipcMain.handle(...) here; the preload
+ * script exposes a typed subset as window.ontology.
+ *
+ * Sections:
+ *   1. Window + app lifecycle
+ *   2. File system IPC (read/write/watch/tree)
+ *   3. Search & git context + harness loader
+ *   4. Terminal (PTY + one-shot exec for agent)
+ *   5. Settings persistence
+ *   6. Window chrome controls
+ */
 import { exec, execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { app, BrowserWindow, ipcMain, dialog, Menu } from 'electron'
@@ -19,6 +34,8 @@ const execFileAsync = promisify(execFile)
 const isDev = !app.isPackaged
 
 const isMac = process.platform === 'darwin'
+
+// ─── 1. Window + app lifecycle ─────────────────────────────────
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -102,7 +119,9 @@ app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) createWindow()
 })
 
-// ─── File System ───────────────────────────────────────────────
+// ─── 2. File system IPC ─────────────────────────────────────────
+// Handlers: dialog:openFolder, fs:read*, fs:write*, fs:create*, fs:delete,
+//           fs:rename, fs:mkdir, fs:refreshTree, fs:watch
 
 interface FileEntry {
   name: string
@@ -143,6 +162,7 @@ async function readDirRecursive(dirPath: string, depth = 0): Promise<FileEntry[]
   return result
 }
 
+// dialog:openFolder — native picker, returns path + initial tree
 ipcMain.handle('dialog:openFolder', async () => {
   const result = await dialog.showOpenDialog(mainWindow!, {
     properties: ['openDirectory'],
@@ -153,6 +173,7 @@ ipcMain.handle('dialog:openFolder', async () => {
   return { path: folderPath, tree }
 })
 
+// fs:readFile / fs:readFileBase64 — load file for editor or image preview
 ipcMain.handle('fs:readFile', async (_e, filePath: string) => {
   try {
     const content = await fs.readFile(filePath, 'utf-8')
@@ -182,6 +203,7 @@ ipcMain.handle('fs:readFileBase64', async (_e, filePath: string) => {
   }
 })
 
+// fs:writeFile — agent + Ctrl+S; creates parent dirs; fixes mistaken empty dirs
 ipcMain.handle('fs:writeFile', async (_e, filePath: string, content: string) => {
   try {
     try {
@@ -302,7 +324,8 @@ ipcMain.handle('fs:watch', async (_e, rootPath: string) => {
   })
 })
 
-// ─── Search & Git context ─────────────────────────────────────
+// ─── 3. Search, git, harness ───────────────────────────────────
+// Handlers: fs:grep, git:context, fs:readRules, harness:load
 
 const SEARCH_SKIP_DIRS = new Set([
   'node_modules', '.git', 'dist', 'dist-electron', 'build', '.next', 'coverage', 'release', '.cache',
@@ -406,6 +429,7 @@ async function grepFallback(rootPath: string, query: string, maxResults: number)
   return matches
 }
 
+// fs:grep — ripgrep if installed, else Node walk+scan fallback
 ipcMain.handle('fs:grep', async (_e, rootPath: string, query: string, maxResults = 20) => {
   const trimmed = query.trim()
   if (!trimmed || !fsSync.existsSync(rootPath)) {
@@ -426,6 +450,7 @@ async function runGit(cwd: string, args: string[]): Promise<string | null> {
   }
 }
 
+// git:context — branch, status, diff for contextOntology workspace layer
 ipcMain.handle('git:context', async (_e, rootPath: string) => {
   if (!fsSync.existsSync(path.join(rootPath, '.git'))) {
     return { success: true, isRepo: false as const }
@@ -458,12 +483,15 @@ ipcMain.handle('fs:readRules', async (_e, rootPath: string) => {
   }
 })
 
+// harness:load — rules + skills from .ontology/, AGENTS.md, etc.
 ipcMain.handle('harness:load', async (_e, rootPath: string, activeRel?: string) => {
   const bundle = await loadProjectHarness(rootPath, activeRel)
   return { success: true, ...bundle }
 })
 
-// ─── Terminal ──────────────────────────────────────────────────
+// ─── 4. Terminal IPC ─────────────────────────────────────────────
+// terminal:create/input/resize/kill — interactive PTY (TerminalPanel)
+// terminal:exec — one-shot command for agent + verifyService
 
 ipcMain.handle('terminal:create', (_e, cwd?: string) => {
   const id = ++terminalCounter
@@ -557,7 +585,7 @@ ipcMain.handle('terminal:exec', async (_e, cwd: string, command: string) => {
   }
 })
 
-// ─── Settings persistence ──────────────────────────────────────
+// ─── 5. Settings persistence (userData/settings.json) ────────────
 
 const settingsPath = path.join(app.getPath('userData'), 'settings.json')
 
@@ -580,7 +608,7 @@ ipcMain.handle('settings:save', async (_e, settings: unknown) => {
   return { success: true }
 })
 
-// ─── Window controls ───────────────────────────────────────────
+// ─── 6. Window controls (title bar on Windows) ───────────────────
 
 ipcMain.on('window:minimize', () => mainWindow?.minimize())
 ipcMain.on('window:maximize', () => {

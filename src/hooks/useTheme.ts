@@ -1,3 +1,7 @@
+/**
+ * Theme hook — toggle/set theme and persist to electron settings file.
+ * loadSavedTheme() runs once on App mount to restore saved preferences.
+ */
 import { useIDEStore } from '../store/ideStore'
 import type { Theme } from '../vite-env.d'
 

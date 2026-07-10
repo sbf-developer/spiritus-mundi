@@ -1,3 +1,10 @@
+/**
+ * Monaco code editor — tab bar + editor surface.
+ *
+ * State: tabs + activeTabPath live in ideStore.
+ * Saves via Ctrl+S → window.ontology.writeFile.
+ * Selection tracking feeds @-context (Ctrl+Shift+L adds selection to chat).
+ */
 import { useRef, useCallback, useEffect } from 'react'
 import Editor, { OnMount } from '@monaco-editor/react'
 import { X, FolderOpen } from 'lucide-react'
@@ -35,11 +42,15 @@ export function EditorArea({ onOpenFolder }: EditorAreaProps) {
     return () => observer.disconnect()
   }, [activeTabPath, tabs.length])
 
+  // ─── Save active tab to disk (Ctrl+S) ──────────────────────────
+
   const handleSave = useCallback(async () => {
     if (!activeTab || activeTab.viewMode === 'image') return
     const result = await window.ontology.writeFile(activeTab.path, activeTab.content)
     if (result.success) markTabSaved(activeTab.path)
   }, [activeTab, markTabSaved])
+
+  // ─── Monaco mount: shortcuts + selection → ideStore ────────────
 
   const handleEditorMount: OnMount = (editorInstance, monacoApi) => {
     editorRef.current = editorInstance
@@ -87,6 +98,8 @@ export function EditorArea({ onOpenFolder }: EditorAreaProps) {
       updateTabContent(activeTab.path, value)
     }
   }
+
+  // ─── Empty states: no folder / no tabs open ────────────────────
 
   if (tabs.length === 0) {
     return (

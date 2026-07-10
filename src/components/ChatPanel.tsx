@@ -1,3 +1,12 @@
+/**
+ * Chat panel — user ↔ LLM interaction and agent pipeline entry point.
+ *
+ * Flow for each message:
+ *   handleSend → runStream → streamChat (aiService)
+ *   → finishAgentTurn (agent mode) → refresh explorer
+ *
+ * Sub-components: ChatContextBar (@ attachments), PlanModeToggle, AgentMessageRenderer
+ */
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { ArrowUp, Trash2, Copy, Check, FileCheck } from 'lucide-react'
 import { useIDEStore, detectLanguage } from '../store/ideStore'
@@ -50,6 +59,8 @@ export function ChatPanel() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [chatMessages])
+
+  // ─── Core: stream one user message to the model (+ agent apply) ─
 
   const runStream = useCallback(
     async (
@@ -166,6 +177,8 @@ export function ChatPanel() {
     ]
   )
 
+  // ─── Send button / Enter key ───────────────────────────────────
+
   const handleSend = async () => {
     const text = input.trim()
     if (!text || isStreaming) return
@@ -212,6 +225,8 @@ export function ChatPanel() {
     window.addEventListener('ontology:execute-plan', onExecute)
     return () => window.removeEventListener('ontology:execute-plan', onExecute)
   }, [handleExecutePlan])
+
+  // ─── Manual "Apply" from a code fence in chat ──────────────────
 
   const handleApplyCode = async (code: string, language: string) => {
     if (!rootPath) return
@@ -268,6 +283,8 @@ export function ChatPanel() {
         : 'Build or edit something in your project...'
       : 'Ask a question...'
 
+  // ─── Render: message list + input + mode controls ──────────────
+
   return (
     <div className="flex flex-col h-full">
       <PanelHeader
@@ -286,6 +303,7 @@ export function ChatPanel() {
         }
       />
 
+      {/* Message list — AgentMessageRenderer for agent, Markdown for chat/user */}
       <div className="flex-1 overflow-y-auto px-3 py-3 space-y-5">
         {chatMessages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full text-center px-4">
@@ -348,6 +366,7 @@ export function ChatPanel() {
 
       <PendingPlanBar />
 
+      {/* Input area: @ context bar + textarea + mode toggles + send */}
       <div className="p-3 border-t border-border-subtle shrink-0">
         <div className="relative bg-surface-overlay border border-border-default rounded-xl focus-within:border-text-muted/40 transition-colors">
           <ChatContextBar input={input} setInput={setInput} inputRef={inputRef} userQuery={input} />
@@ -387,6 +406,7 @@ export function ChatPanel() {
   )
 }
 
+/** Animated dots while assistant message is streaming. */
 function TypingIndicator() {
   return (
     <span className="inline-flex gap-1 items-center py-0.5">

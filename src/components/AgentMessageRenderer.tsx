@@ -1,3 +1,9 @@
+/**
+ * Renders agent assistant messages as structured blocks.
+ *
+ * Maps AgentMessageBlock → CodeBox (files/code), ActionCard (run/mkdir),
+ * or MarkdownMessage (prose). Summary section shows ✓/⚠ apply results.
+ */
 import { CodeBox } from './CodeBox'
 import { MarkdownMessage } from './MarkdownMessage'
 import { parseAgentMessageBlocks } from '../lib/agentMessageParser'
@@ -23,6 +29,7 @@ export function AgentMessageRenderer({ content, onApplyCode, showApply }: AgentM
     <div className="space-y-2.5 agent-message">
       {blocks.map((block, i) => {
         switch (block.type) {
+          // <file path="..."> from agent output
           case 'file': {
             const name = block.path.split(/[/\\]/).pop() || block.path
             const lang = detectLanguage(name)
@@ -35,6 +42,7 @@ export function AgentMessageRenderer({ content, onApplyCode, showApply }: AgentM
               />
             )
           }
+          // markdown ``` fence fallback
           case 'code': {
             const lang = block.path ? detectLanguage(block.path) : block.language
             return (
@@ -85,6 +93,7 @@ export function AgentMessageRenderer({ content, onApplyCode, showApply }: AgentM
                 body={block.commands.map((c) => `$ ${c}`).join('\n')}
               />
             )
+          // --- block appended after agent apply (✓/⚠ summary) ---
           case 'summary':
             return (
               <div key={i} className="agent-summary">

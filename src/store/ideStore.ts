@@ -1,3 +1,15 @@
+/**
+ * Global IDE state (Zustand).
+ *
+ * Single source of truth for UI. Grouped sections below:
+ *   1. Types — tabs, chat messages, context items
+ *   2. State shape — all fields + action signatures
+ *   3. Defaults — settings, layout sizes
+ *   4. Store implementation — mutations
+ *
+ * Read/write pattern: components call useIDEStore() selectors;
+ * services may call useIDEStore.getState() for one-off updates.
+ */
 import { create } from 'zustand'
 import type { FileEntry, AISettings, Theme } from './vite-env.d'
 import { applyTheme } from '../lib/theme'
@@ -5,6 +17,8 @@ import type { ContextItem, EditorSelection, RecentEdit } from '../services/conte
 import { createTerminalContext, createCodeContext } from '../services/contextService'
 
 export type { ContextItem, EditorSelection, RecentEdit }
+
+// ─── 1. Types ────────────────────────────────────────────────────
 
 export interface OpenTab {
   path: string
@@ -31,6 +45,8 @@ export interface PendingPlan {
   userRequest: string
   plan: string
 }
+
+// ─── 2. State shape (fields + actions) ───────────────────────────
 
 interface IDEState {
   rootPath: string | null
@@ -93,6 +109,8 @@ interface IDEState {
   recordRecentEdit: (path: string, source: 'user' | 'agent') => void
 }
 
+// ─── 3. Defaults ─────────────────────────────────────────────────
+
 export const defaultSettings: AISettings = {
   provider: 'ollama',
   apiKey: '',
@@ -124,6 +142,8 @@ function detectLanguage(filename: string): string {
 
 export { detectLanguage }
 
+// ─── 4. Store implementation ─────────────────────────────────────
+
 export const useIDEStore = create<IDEState>((set, get) => ({
   rootPath: null,
   fileTree: [],
@@ -150,6 +170,8 @@ export const useIDEStore = create<IDEState>((set, get) => ({
 
   setRootPath: (path) => set({ rootPath: path, recentEdits: [] }),
   setFileTree: (tree) => set({ fileTree: tree }),
+
+  // ─── Editor tabs ───────────────────────────────────────────────
 
   openTab: (tab) => {
     const { tabs } = get()
@@ -190,6 +212,8 @@ export const useIDEStore = create<IDEState>((set, get) => ({
     })
   },
 
+  // ─── Panel layout (widths / visibility) ────────────────────────
+
   setSidebarWidth: (w) => set({ sidebarWidth: Math.max(180, Math.min(480, w)) }),
   setChatWidth: (w) => set({ chatWidth: Math.max(280, Math.min(600, w)) }),
   setTerminalHeight: (h) => set({ terminalHeight: Math.max(120, Math.min(600, h)) }),
@@ -208,6 +232,8 @@ export const useIDEStore = create<IDEState>((set, get) => ({
     set({ theme })
   },
   setSettings: (s) => set({ settings: normalizeSettings(s) }),
+
+  // ─── Chat messages + streaming ─────────────────────────────────
 
   addChatMessage: (msg) =>
     set({ chatMessages: [...get().chatMessages, msg] }),
@@ -232,6 +258,8 @@ export const useIDEStore = create<IDEState>((set, get) => ({
         m.id === id ? { ...m, appliedFiles: files } : m
       ),
     }),
+
+  // ─── @ context attachments + terminal/selection buffers ───────
 
   addContextItem: (item) =>
     set((s) => ({

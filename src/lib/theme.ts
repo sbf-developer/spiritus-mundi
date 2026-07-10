@@ -1,3 +1,6 @@
+/**
+ * Theme tokens — syncs DOM data-theme, Monaco, and xterm color schemes.
+ */
 import type { Theme } from '../vite-env.d'
 
 export function applyTheme(theme: Theme) {

@@ -1,3 +1,4 @@
+/** Drag handle to resize sidebar, chat panel, or terminal height. */
 import { useCallback, useRef } from 'react'
 
 interface ResizeHandleProps {

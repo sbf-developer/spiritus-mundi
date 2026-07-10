@@ -1,3 +1,9 @@
+/**
+ * Lightweight markdown renderer for chat messages.
+ *
+ * Splits on ``` fences → CodeBox for code, inline **bold** / `code` for text.
+ * Used for user messages and non-agent assistant prose.
+ */
 import { CodeBox, parseFenceInfo } from './CodeBox'
 
 interface MarkdownMessageProps {

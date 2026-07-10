@@ -1,3 +1,8 @@
+/**
+ * Custom window title bar — branding, open folder, chat/theme toggles.
+ * On Windows: includes minimize/maximize/close via window.ontology.window.*
+ * On macOS: uses native traffic lights (frame: false inset style).
+ */
 import { FolderOpen, Minus, Square, X, Sun, Moon, MessageSquare } from 'lucide-react'
 import type { Theme } from '../vite-env.d'
 

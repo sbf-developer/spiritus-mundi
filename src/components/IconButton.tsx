@@ -1,3 +1,4 @@
+/** Small icon-only button used in panel headers (Explorer, Terminal, Chat). */
 interface IconButtonProps {
   icon: React.ReactNode
   onClick?: () => void

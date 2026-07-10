@@ -3,6 +3,13 @@
  *
  * Inspired by Cursor/Windsurf: layered sources, priority tiers, token budgets.
  * Each layer maps to how models consume context (identity → rules → workspace → session → retrieval → user).
+ *
+ * Two public entry points:
+ *   gatherContextInputs()  — async: load harness, grep, git, snippets from disk
+ *   assembleContextPrompt() — sync: pack layers into one system string
+ *
+ * Layer order (see ContextLayer type):
+ *   identity → rules → skills → research → workspace → session → retrieval → attached → history
  */
 
 import type { FileEntry } from '../vite-env.d'
@@ -29,6 +36,8 @@ import {
 import { runDeepResearch, formatResearchLayer } from './researchService'
 
 export type { GrepHit }
+
+// ─── Types: phases, layers, and the full input to assembleContextPrompt ─
 
 export type AgentPhase = 'default' | 'plan' | 'execute' | 'fix'
 
@@ -71,6 +80,8 @@ export interface ContextAssemblyInput {
   researchBlock: string
 }
 
+// ─── Token budgets — packLayers truncates each layer to these caps ─
+
 /** Character budgets per mode (~4 chars ≈ 1 token). */
 const BUDGET: Record<ChatMode, number> = {
   agent: 32000,
@@ -100,6 +111,9 @@ function activeTab(input: ContextAssemblyInput): OpenTab | null {
   return tab?.viewMode !== 'image' ? tab ?? null : null
 }
 
+// ─── Layer builders (each → one section of the system prompt) ───
+
+// identity — who the model is (Agent/Chat, plan/execute/fix phase)
 function buildIdentityLayer(
   mode: ChatMode,
   rootPath: string | null,
@@ -154,10 +168,12 @@ Answer clearly with markdown and fenced code blocks. Do NOT use <file> tags or m
 ${rootPath ? `Project open: ${rootPath}` : 'No project folder open.'}`
 }
 
+// skills — matched SKILL.md playbooks for agent mode
 function buildSkillsLayer(skills: HarnessSkill[]): string {
   return formatSkillsForPrompt(skills)
 }
 
+// workspace — file tree listing + git status/diff
 function buildWorkspaceLayer(
   rootPath: string | null,
   fileTree: FileEntry[],
@@ -186,6 +202,7 @@ function buildWorkspaceLayer(
   return parts.join('\n')
 }
 
+// session — open tabs, active file, selection, terminal tail, recent edits
 function buildSessionLayer(input: ContextAssemblyInput): string {
   const tab = activeTab(input)
   const parts: string[] = ['# Session state']
@@ -236,6 +253,7 @@ function buildSessionLayer(input: ContextAssemblyInput): string {
   return parts.join('\n')
 }
 
+// retrieval — grep hits + auto-loaded file snippets from research
 function buildRetrievalLayer(
   grepHits: GrepHit[],
   autoSnippets: { rel: string; language: string; content: string }[]
@@ -264,6 +282,7 @@ function buildRetrievalLayer(
   return parts.join('\n')
 }
 
+// history — compact summary of prior @ attachments and agent-applied files
 function buildHistoryLayer(chatHistory: ChatMessage[]): string {
   const prior = chatHistory.filter((m) => m.role === 'user' && m.contextSnapshot?.length)
   const applied = chatHistory.filter((m) => m.role === 'assistant' && m.appliedFiles?.length)
@@ -301,6 +320,7 @@ export interface AssembleOptions {
   fixErrors?: string
 }
 
+// plan / fix — injected when user approves plan or verify fails
 function buildPlanLayer(approvedPlan?: string): string {
   if (!approvedPlan?.trim()) return ''
   return `# Approved plan\nExecute this plan exactly:\n\n${approvedPlan}`
@@ -310,6 +330,8 @@ function buildFixLayer(fixErrors?: string): string {
   if (!fixErrors?.trim()) return ''
   return `# Verification errors (fix these)\n\`\`\`\n${fixErrors}\n\`\`\``
 }
+
+// ─── Packing: merge layers within char budget per mode ───────────
 
 function packLayers(layers: { layer: ContextLayer; text: string }[], mode: ChatMode): string {
   const budget = BUDGET[mode]
@@ -329,6 +351,8 @@ function packLayers(layers: { layer: ContextLayer; text: string }[], mode: ChatM
 
   return included.join('\n\n---\n\n')
 }
+
+// ─── Public API ──────────────────────────────────────────────────
 
 export function assembleContextPrompt(input: ContextAssemblyInput, options: AssembleOptions = {}): string {
   const phase = options.phase ?? 'default'
@@ -356,6 +380,7 @@ export function assembleContextPrompt(input: ContextAssemblyInput, options: Asse
 
 export { extractSearchTerms, pickGrepQuery }
 
+// Async: load harness, git, research from disk → full ContextAssemblyInput
 export async function gatherContextInputs(
   base: Omit<
     ContextAssemblyInput,
@@ -434,6 +459,7 @@ export async function gatherContextInputs(
   return { ...base, rules, skills, git, grepHits, autoSnippets, researchBlock }
 }
 
+// @-context helpers — build ContextItems for git/rules attachments
 export async function createGitContextItem(rootPath: string): Promise<ContextItem | null> {
   const gitRes = await window.ontology.gitContext(rootPath)
   if (!gitRes.success || !gitRes.isRepo) {

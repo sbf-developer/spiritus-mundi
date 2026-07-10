@@ -1,3 +1,7 @@
+/**
+ * Agent vs Chat mode dropdown in the chat input footer.
+ * Agent = can write files; Chat = read-only Q&A.
+ */
 import { ChevronDown, Infinity, MessageCircle } from 'lucide-react'
 import { useIDEStore, type ChatMode } from '../store/ideStore'
 import { useState, useRef, useEffect } from 'react'

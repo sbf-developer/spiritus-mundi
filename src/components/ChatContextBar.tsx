@@ -1,3 +1,9 @@
+/**
+ * @-context UI — attach files, terminal, git, rules to chat input.
+ *
+ * Type @ in the chat box to open the picker. Selected items become
+ * ContextItems sent with the next message (see contextService.ts).
+ */
 import { useState, useRef, useEffect } from 'react'
 import { Terminal, FileCode, FolderOpen, Search, X, Braces, GitBranch, ScrollText } from 'lucide-react'
 import { useIDEStore } from '../store/ideStore'
@@ -80,6 +86,8 @@ export function ChatContextBar({ input, setInput, inputRef, userQuery }: ChatCon
     checkAt()
   }, [input, inputRef])
 
+  // ─── Build filtered @ picker options from workspace state ────────
+
   const options = buildContextPickerOptions(fileTree, terminalBuffer, editorSelection, filter)
 
   const removeAtToken = () => {
@@ -97,6 +105,8 @@ export function ChatContextBar({ input, setInput, inputRef, userQuery }: ChatCon
       el.focus()
     })
   }
+
+  // ─── Resolve picker choice → ContextItem in store ────────────────
 
   const pickOption = async (optionId: string, type: string) => {
     removeAtToken()
@@ -224,6 +234,7 @@ export function ChatContextBar({ input, setInput, inputRef, userQuery }: ChatCon
   )
 }
 
+/** Pill chips shown above chat input for attached @ context. */
 function ContextChip({ item, onRemove }: { item: ContextItem; onRemove: () => void }) {
   const Icon = TYPE_ICONS[item.type] ?? FileCode
   return (
@@ -237,6 +248,7 @@ function ContextChip({ item, onRemove }: { item: ContextItem; onRemove: () => vo
   )
 }
 
+/** Prefix user message with @ labels for display in chat history. */
 export function formatUserMessageWithContext(content: string, items: ContextItem[]): string {
   if (items.length === 0) return content
   const labels = items.map((i) => `@${i.label}`).join(', ')
